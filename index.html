@@ -2,208 +2,710 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Контроль веса</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>Контроль веса — Telegram Mini App</title>
+    <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        :root {
-            --bg-color: #0f0f12;
-            --card-bg: #1e1e24;
-            --text-color: #eeeeee;
-            --accent-color: #6c5ce7;
-            --error-color: #ff7675;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
+        * {
             margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
-
-        .container {
-            max-width: 600px;
-            width: 100%;
-        }
-
-        h1 { text-align: center; }
-
-        .card {
-            background-color: var(--card-bg);
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-size: 0.9em; }
-        input {
-            width: 100%;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #333;
-            background: #2a2a32;
-            color: white;
+            padding: 0;
             box-sizing: border-box;
         }
 
-        button {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            background-color: var(--accent-color);
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 10px;
+        body {
+            background-color: #0f0f12;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #eeeeee;
+            padding: 20px 16px 40px;
+            min-height: 100vh;
         }
 
-        .error { color: var(--error-color); font-size: 0.85em; margin-top: 5px; display: none; }
+        .app-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 10px; border-bottom: 1px solid #333; text-align: left; }
+        /* карточки */
+        .card {
+            background-color: #1e1e24;
+            border-radius: 24px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+        }
 
-        #stats-section { display: none; }
-        canvas { max-width: 100%; }
-        .reset-btn { background-color: #d63031; margin-top: 20px; }
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: -0.3px;
+            background: linear-gradient(135deg, #ffffff, #b9b3ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .sub {
+            color: #a0a0b0;
+            font-size: 14px;
+            margin-bottom: 24px;
+            border-left: 3px solid #6c5ce7;
+            padding-left: 12px;
+        }
+
+        /* форма */
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #cdcddf;
+        }
+
+        input {
+            width: 100%;
+            background-color: #2c2c34;
+            border: 1px solid #3a3a44;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 16px;
+            color: #ffffff;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #6c5ce7;
+            box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.3);
+        }
+
+        .weight-input {
+            font-weight: 500;
+        }
+
+        .error-msg {
+            color: #ff6b6b;
+            font-size: 13px;
+            margin-top: 6px;
+            padding-left: 8px;
+        }
+
+        /* кнопки */
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        button {
+            background-color: #2c2c34;
+            border: none;
+            border-radius: 40px;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #eeeeee;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: 1 0 auto;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background-color: #6c5ce7;
+            color: white;
+            box-shadow: 0 2px 6px rgba(108, 92, 231, 0.3);
+        }
+
+        .btn-primary:hover {
+            background-color: #5f4fdb;
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background-color: #2c2c34;
+            border: 1px solid #4a4a56;
+        }
+
+        .btn-secondary:hover {
+            background-color: #3a3a44;
+        }
+
+        .btn-danger {
+            background-color: #3a2a2f;
+            border: 1px solid #8a4a5a;
+            color: #ffaaaa;
+        }
+
+        .btn-danger:hover {
+            background-color: #542e3a;
+        }
+
+        /* блок статистики */
+        .stats-container {
+            background-color: #1e1e24;
+            border-radius: 24px;
+            padding: 20px;
+            margin-top: 8px;
+            transition: 0.2s;
+        }
+
+        .stats-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stats-title i {
+            font-size: 24px;
+        }
+
+        .no-data-message {
+            background-color: #2a2a32;
+            border-radius: 20px;
+            padding: 32px 20px;
+            text-align: center;
+            color: #aaaaaa;
+            font-size: 16px;
+        }
+
+        .weight-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 28px;
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .weight-table th,
+        .weight-table td {
+            text-align: left;
+            padding: 12px 12px;
+            border-bottom: 1px solid #2e2e38;
+        }
+
+        .weight-table th {
+            background-color: #2a2a32;
+            font-weight: 600;
+            color: #cbcbff;
+        }
+
+        .weight-table td {
+            color: #f0f0f0;
+        }
+
+        .weight-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .chart-container {
+            margin-top: 12px;
+            position: relative;
+            height: 280px;
+            width: 100%;
+        }
+
+        canvas {
+            max-height: 280px;
+            width: 100%;
+        }
+
+        hr {
+            border-color: #2e2e38;
+            margin: 16px 0;
+        }
+
+        .flex-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Всплывающее уведомление (toast) */
+        .toast-notification {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            background-color: #2c2c34;
+            backdrop-filter: blur(8px);
+            background-color: rgba(44, 44, 52, 0.95);
+            border-left: 4px solid #6c5ce7;
+            border-radius: 60px;
+            padding: 12px 24px;
+            color: #f0f0f0;
+            font-weight: 500;
+            font-size: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        @media (max-width: 500px) {
+            .toast-notification {
+                white-space: normal;
+                text-align: center;
+                max-width: 85%;
+                border-radius: 28px;
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            body {
+                padding: 16px 12px 32px;
+            }
+            button {
+                padding: 10px 14px;
+            }
+        }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h1>Контроль веса</h1>
-
+<div class="app-container">
     <div class="card">
+        <h1>⚖️ Контроль веса</h1>
+        <div class="sub">Записывайте прогресс — стройте график</div>
+
+        <!-- Форма ввода -->
         <div class="form-group">
-            <label>Вес (кг)</label>
-            <input type="number" id="weightInput" step="0.1" placeholder="70.5">
-            <div id="weightError" class="error">Введите число от 20 до 300</div>
+            <label>📆 Дата</label>
+            <input type="date" id="dateInput" class="date-input">
         </div>
+
         <div class="form-group">
-            <label>Дата</label>
-            <input type="date" id="dateInput">
+            <label>⚡ Вес (кг)</label>
+            <input type="number" id="weightInput" class="weight-input" step="0.1" placeholder="например, 72.5" autocomplete="off">
+            <div id="weightError" class="error-msg"></div>
         </div>
-        <button id="saveBtn">Сохранить вес</button>
+
+        <div class="btn-group">
+            <button id="saveBtn" class="btn-primary">💾 Сохранить вес</button>
+        </div>
     </div>
 
-    <button id="toggleStatsBtn">Показать статистику</button>
+    <!-- Панель действий -->
+    <div class="flex-buttons" style="margin-bottom: 12px;">
+        <button id="showStatsBtn" class="btn-secondary">📊 Показать статистику</button>
+        <button id="resetDataBtn" class="btn-danger">🗑️ Сбросить все данные</button>
+    </div>
 
-    <div id="stats-section">
-        <div class="card">
-            <h3>График</h3>
-            <canvas id="weightChart"></canvas>
+    <!-- Блок статистики (скрыт по умолчанию) -->
+    <div id="statsBlock" class="stats-container" style="display: none;">
+        <div class="stats-title">
+            📈 История и график
         </div>
-        <div class="card">
-            <h3>Таблица</h3>
-            <div id="tableContainer"></div>
+        <div id="statsContent">
+            <!-- динамическая таблица + график -->
         </div>
-        <button class="reset-btn" id="resetBtn">Сбросить все данные</button>
     </div>
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    // ---------- КЛЮЧ ХРАНИЛИЩА ----------
+    const STORAGE_KEY = "weightLog";
 
-    const weightInput = document.getElementById('weightInput');
+    // Глобальная переменная для текущего экземпляра графика
+    let weightChart = null;
+
+    // DOM элементы
     const dateInput = document.getElementById('dateInput');
+    const weightInput = document.getElementById('weightInput');
+    const weightErrorDiv = document.getElementById('weightError');
     const saveBtn = document.getElementById('saveBtn');
-    const toggleStatsBtn = document.getElementById('toggleStatsBtn');
-    const statsSection = document.getElementById('stats-section');
-    const weightError = document.getElementById('weightError');
-    const resetBtn = document.getElementById('resetBtn');
+    const showStatsBtn = document.getElementById('showStatsBtn');
+    const resetDataBtn = document.getElementById('resetDataBtn');
+    const statsBlock = document.getElementById('statsBlock');
+    const statsContent = document.getElementById('statsContent');
 
-    dateInput.valueAsDate = new Date();
-
-    let chartInstance = null;
-
-    function getStorage() {
-        return JSON.parse(localStorage.getItem('weightLog') || '[]');
+    // ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
+    function getTodayDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
-    function saveStorage(data) {
-        localStorage.setItem('weightLog', JSON.stringify(data.sort((a, b) => new Date(a.date) - new Date(b.date))));
+    // Установить сегодняшнюю дату в поле input
+    function setDefaultDate() {
+        dateInput.value = getTodayDate();
     }
 
-    saveBtn.addEventListener('click', () => {
-        const weight = parseFloat(weightInput.value);
-        const date = dateInput.value;
-
-        if (isNaN(weight) || weight < 20 || weight > 300) {
-            weightError.style.display = 'block';
-            return;
+    // Получить массив записей из localStorage
+    function getWeightLog() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (!stored) return [];
+        try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) return parsed;
+            return [];
+        } catch(e) {
+            return [];
         }
-        weightError.style.display = 'none';
+    }
 
-        let data = getStorage();
-        const existingIndex = data.findIndex(item => item.date === date);
+    // Сохранить массив записей в localStorage
+    function saveWeightLog(log) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+    }
 
-        if (existingIndex !== -1) {
-            if (!confirm('Перезаписать вес за эту дату?')) return;
-            data[existingIndex].weight = weight;
-        } else {
-            data.push({ date, weight });
-        }
+    // Очистить сообщение об ошибке
+    function clearError() {
+        weightErrorDiv.innerText = '';
+    }
 
-        saveStorage(data);
-        alert('Сохранено!');
-        if (statsSection.style.display === 'block') updateStats();
-    });
+    // Показать ошибку веса
+    function showWeightError(message) {
+        weightErrorDiv.innerText = message;
+    }
 
-    function updateStats() {
-        const data = getStorage();
-        if (data.length === 0) {
-            statsSection.innerHTML = '<p>Нет данных. Добавьте свой первый вес!</p>';
-            return;
-        }
-
-        // Table
-        let html = '<table><tr><th>Дата</th><th>Вес (кг)</th></tr>';
-        data.forEach(item => {
-            html += `<tr><td>${item.date}</td><td>${item.weight}</td></tr>`;
-        });
-        html += '</table>';
-        document.getElementById('tableContainer').innerHTML = html;
-
-        // Chart
-        const ctx = document.getElementById('weightChart').getContext('2d');
-        if (chartInstance) chartInstance.destroy();
+    // Показать всплывающее уведомление (тост)
+    function showToast(message, duration = 2200) {
+        // удалить существующий тост, если есть
+        const existingToast = document.querySelector('.toast-notification');
+        if (existingToast) existingToast.remove();
         
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.map(d => d.date),
-                datasets: [{
-                    label: 'Вес (кг)',
-                    data: data.map(d => d.weight),
-                    borderColor: '#6c5ce7',
-                    tension: 0.1
-                }]
-            },
-            options: { responsive: true, scales: { y: { beginAtZero: false } } }
-        });
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.innerText = message;
+        document.body.appendChild(toast);
+        
+        // анимация появления
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) scale(1)';
+        }, 10);
+        
+        // удаление через duration
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) scale(0.9)';
+            setTimeout(() => {
+                if (toast.parentNode) toast.remove();
+            }, 200);
+        }, duration);
     }
 
-    toggleStatsBtn.addEventListener('click', () => {
-        const isVisible = statsSection.style.display === 'block';
-        statsSection.style.display = isVisible ? 'none' : 'block';
-        toggleStatsBtn.innerText = isVisible ? 'Показать статистику' : 'Скрыть статистику';
-        if (!isVisible) updateStats();
-    });
+    // Проверка корректности веса
+    function isValidWeight(weight) {
+        if (isNaN(weight)) return false;
+        if (weight < 20 || weight > 300) return false;
+        return true;
+    }
 
-    resetBtn.addEventListener('click', () => {
-        if (confirm('Удалить все данные?')) {
-            localStorage.removeItem('weightLog');
-            location.reload();
+    // Обновить статистику, если блок виден (перерисовать таблицу + график)
+    function refreshStatisticsIfVisible() {
+        if (statsBlock.style.display === 'none') return;
+        renderStatistics();
+    }
+
+    // Основная логика добавления / обновления веса
+    function addOrUpdateWeight(date, weight) {
+        let log = getWeightLog();
+        const existingIndex = log.findIndex(entry => entry.date === date);
+        
+        let isUpdate = false;
+        // Если запись на эту дату уже существует
+        if (existingIndex !== -1) {
+            const userConfirmed = confirm(`Запись за ${date} уже существует (${log[existingIndex].weight} кг). Перезаписать?`);
+            if (!userConfirmed) {
+                return false; // не обновляем
+            }
+            // обновляем вес
+            log[existingIndex].weight = weight;
+            isUpdate = true;
+        } else {
+            // новая запись
+            log.push({ date: date, weight: weight });
+            isUpdate = false;
         }
-    });
-</script>
+        
+        // сохраняем обновлённый массив
+        saveWeightLog(log);
+        
+        // Показываем уведомление "Молодец! Ты делаешь мир легче!"
+        showToast("🎉 Молодец! Ты делаешь мир легче!");
+        
+        return true;
+    }
 
+    // Сброс всех данных (с подтверждением)
+    function resetAllData() {
+        const confirmReset = confirm("⚠️ ВНИМАНИЕ: все записи о весе будут удалены без возможности восстановления. Продолжить?");
+        if (!confirmReset) return;
+        
+        localStorage.removeItem(STORAGE_KEY);
+        // очищаем поле ошибки и сбрасываем форму
+        clearError();
+        weightInput.value = '';
+        setDefaultDate();
+        
+        // если статистика открыта — обновить её (покажет пустое состояние)
+        if (statsBlock.style.display !== 'none') {
+            renderStatistics();
+        }
+    }
+
+    // ---------- ОТРИСОВКА СТАТИСТИКИ (ТАБЛИЦА + ГРАФИК) ----------
+    function renderStatistics() {
+        const log = getWeightLog();
+        
+        // Сортируем по дате (от старых к новым)
+        const sortedLog = [...log].sort((a, b) => a.date.localeCompare(b.date));
+        
+        // Если данных нет — показываем информационное сообщение
+        if (sortedLog.length === 0) {
+            statsContent.innerHTML = `
+                <div class="no-data-message">
+                    📭 Нет данных. Добавьте свой первый вес!
+                </div>
+            `;
+            // уничтожаем старый график, если он есть
+            if (weightChart) {
+                weightChart.destroy();
+                weightChart = null;
+            }
+            return;
+        }
+        
+        // Формируем таблицу (она будет первой)
+        let tableHtml = `
+            <table class="weight-table">
+                <thead>
+                    <tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr>
+                </thead>
+                <tbody>
+        `;
+        
+        for (let entry of sortedLog) {
+            const weightFormatted = parseFloat(entry.weight).toFixed(1);
+            tableHtml += `<tr><td>${entry.date}</td><td>${weightFormatted} кг</td></tr>`;
+        }
+        tableHtml += `</tbody></table>`;
+        
+        // Добавляем контейнер для графика (будет под таблицей)
+        tableHtml += `<div class="chart-container"><canvas id="weightChartCanvas" width="400" height="250" style="max-width:100%; height:auto; background: transparent;"></canvas></div>`;
+        
+        statsContent.innerHTML = tableHtml;
+        
+        // Подготовка данных для графика
+        const labels = sortedLog.map(entry => entry.date);
+        const weightsData = sortedLog.map(entry => entry.weight);
+        
+        // Уничтожаем предыдущий график, если он существует
+        if (weightChart) {
+            weightChart.destroy();
+            weightChart = null;
+        }
+        
+        const canvas = document.getElementById('weightChartCanvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            
+            // Вычисляем максимальное значение для оси Y (с небольшим запасом)
+            const maxWeight = Math.max(...weightsData);
+            const yMax = Math.ceil(maxWeight + 2);
+            
+            weightChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Вес (кг)',
+                        data: weightsData,
+                        borderColor: '#6c5ce7',
+                        backgroundColor: 'rgba(108, 92, 231, 0.05)',
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#a29bfe',
+                        pointBorderColor: '#ffffff',
+                        pointHoverRadius: 6,
+                        tension: 0.2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#eeeeee',
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1e1e24',
+                            titleColor: '#ffffff',
+                            bodyColor: '#dddddd',
+                            borderColor: '#6c5ce7',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: '#ccccdd',
+                                maxRotation: 35,
+                                autoSkip: true,
+                                font: { size: 11 }
+                            },
+                            grid: {
+                                color: 'rgba(200, 200, 220, 0.1)'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Дата',
+                                color: '#aaaacc'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#ccccdd',
+                                stepSize: 5,
+                                callback: function(val) {
+                                    return val + ' кг';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(200, 200, 220, 0.1)'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Вес (кг)',
+                                color: '#aaaacc'
+                            },
+                            // ⬇️ Ось Y начинается с 70 кг (по требованию)
+                            min: 70,
+                            max: yMax > 70 ? yMax : 90,   // если все веса ниже 70, покажем до 90, чтобы графика не слипалась
+                            suggestedMin: 70,
+                            suggestedMax: yMax > 70 ? yMax + 2 : 92
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            top: 15,
+                            bottom: 10
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    // ---------- ОБРАБОТЧИК СОХРАНЕНИЯ ВЕСА ----------
+    function handleSaveWeight() {
+        clearError();
+        
+        let weightRaw = weightInput.value.trim();
+        if (weightRaw === "") {
+            showWeightError("Введите вес (число)");
+            return;
+        }
+        
+        // замена запятой на точку для удобства
+        weightRaw = weightRaw.replace(',', '.');
+        const weightNum = parseFloat(weightRaw);
+        
+        if (!isValidWeight(weightNum)) {
+            showWeightError("Вес должен быть числом от 20 до 300 кг.");
+            return;
+        }
+        
+        const selectedDate = dateInput.value;
+        if (!selectedDate) {
+            showWeightError("Выберите корректную дату");
+            return;
+        }
+        
+        // Проверка формата даты
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(selectedDate)) {
+            showWeightError("Неверный формат даты");
+            return;
+        }
+        
+        // Сохраняем / обновляем запись
+        const success = addOrUpdateWeight(selectedDate, weightNum);
+        if (success) {
+            // Очищаем поле веса, дату сбрасываем на сегодня
+            weightInput.value = '';
+            setDefaultDate();
+            clearError();
+            
+            // Если статистика открыта — обновляем её
+            refreshStatisticsIfVisible();
+            
+            // Визуальный фидбек кнопки
+            saveBtn.style.transform = 'scale(0.97)';
+            setTimeout(() => { saveBtn.style.transform = ''; }, 120);
+        } else {
+            // пользователь отменил перезапись — ничего не делаем
+        }
+    }
+    
+    // ---------- ПОКАЗАТЬ / ОБНОВИТЬ СТАТИСТИКУ ----------
+    function handleShowStatistics() {
+        // Если блок скрыт — показываем и рендерим
+        if (statsBlock.style.display === 'none') {
+            statsBlock.style.display = 'block';
+            renderStatistics();
+        } else {
+            // Если уже виден — просто перерисовываем (обновляем данные)
+            renderStatistics();
+        }
+    }
+    
+    // ---------- ИНИЦИАЛИЗАЦИЯ И ОБРАБОТЧИКИ ----------
+    function init() {
+        // Установка сегодняшней даты по умолчанию
+        setDefaultDate();
+        
+        // Навешиваем обработчики (без инлайн)
+        saveBtn.addEventListener('click', handleSaveWeight);
+        showStatsBtn.addEventListener('click', handleShowStatistics);
+        resetDataBtn.addEventListener('click', resetAllData);
+        
+        // Обработка ввода веса: очистка ошибки при начале ввода
+        weightInput.addEventListener('input', () => {
+            clearError();
+        });
+        
+        // Доп. эстетика: если пользователь нажал enter в поле веса — сохранить
+        weightInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSaveWeight();
+            }
+        });
+        
+        // Поддержка Telegram WebApp
+        if (window.Telegram && Telegram.WebApp) {
+            const tg = Telegram.WebApp;
+            tg.expand();   // расширение на весь экран
+            tg.enableClosingConfirmation();
+            tg.setHeaderColor('#0f0f12');
+            tg.setBackgroundColor('#0f0f12');
+        }
+    }
+    
+    // Запуск после полной загрузки DOM
+    document.addEventListener('DOMContentLoaded', init);
+</script>
 </body>
 </html>
