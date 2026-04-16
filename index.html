@@ -321,6 +321,8 @@
 
     // Глобальная переменная для текущего экземпляра графика
     let weightChart = null;
+    // Текущий массив записей (загружается из облака)
+    let currentWeightLog = [];
 
     // DOM элементы
     const dateInput = document.getElementById('dateInput');
@@ -341,42 +343,46 @@
         return `${year}-${month}-${day}`;
     }
 
-    // Установить сегодняшнюю дату в поле input
     function setDefaultDate() {
         dateInput.value = getTodayDate();
     }
 
-    // Получить массив записей из localStorage
-    function getWeightLog() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (!stored) return [];
-        try {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed)) return parsed;
-            return [];
-        } catch(e) {
-            return [];
+    // Загрузить данные из Telegram CloudStorage
+    function loadWeightLogFromCloud(callback) {
+        if (!window.Telegram || !Telegram.WebApp || !Telegram.WebApp.CloudStorage) {
+            console.warn("CloudStorage недоступен, используем заглушку");
+            callback([]);
+            return;
         }
+        Telegram.WebApp.CloudStorage.getItem(STORAGE_KEY, function(err, value) {
+            if (err || !value) {
+                callback([]);
+            } else {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (Array.isArray(parsed)) callback(parsed);
+                    else callback([]);
+                } catch(e) {
+                    callback([]);
+                }
+            }
+        });
     }
 
-    // Сохранить массив записей в localStorage
-    function saveWeightLog(log) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(log));
-    }
-
-    // Очистить сообщение об ошибке
-    function clearError() {
-        weightErrorDiv.innerText = '';
-    }
-
-    // Показать ошибку веса
-    function showWeightError(message) {
-        weightErrorDiv.innerText = message;
+    // Сохранить массив записей в CloudStorage
+    function saveWeightLogToCloud(log, callback) {
+        if (!window.Telegram || !Telegram.WebApp || !Telegram.WebApp.CloudStorage) {
+            console.warn("CloudStorage недоступен, данные не сохранены");
+            if (callback) callback(false);
+            return;
+        }
+        Telegram.WebApp.CloudStorage.setItem(STORAGE_KEY, JSON.stringify(log), function(err, success) {
+            if (callback) callback(!err && success);
+        });
     }
 
     // Показать всплывающее уведомление (тост)
     function showToast(message, duration = 2200) {
-        // удалить существующий тост, если есть
         const existingToast = document.querySelector('.toast-notification');
         if (existingToast) existingToast.remove();
         
@@ -385,13 +391,11 @@
         toast.innerText = message;
         document.body.appendChild(toast);
         
-        // анимация появления
         setTimeout(() => {
             toast.style.opacity = '1';
             toast.style.transform = 'translateX(-50%) scale(1)';
         }, 10);
         
-        // удаление через duration
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateX(-50%) scale(0.9)';
@@ -401,81 +405,86 @@
         }, duration);
     }
 
-    // Проверка корректности веса
+    function clearError() {
+        weightErrorDiv.innerText = '';
+    }
+
+    function showWeightError(message) {
+        weightErrorDiv.innerText = message;
+    }
+
     function isValidWeight(weight) {
         if (isNaN(weight)) return false;
         if (weight < 20 || weight > 300) return false;
         return true;
     }
 
-    // Обновить статистику, если блок виден (перерисовать таблицу + график)
+    // Обновить интерфейс статистики (если открыт)
     function refreshStatisticsIfVisible() {
         if (statsBlock.style.display === 'none') return;
         renderStatistics();
     }
 
-    // Основная логика добавления / обновления веса
-    function addOrUpdateWeight(date, weight) {
-        let log = getWeightLog();
+    // Добавить или обновить запись (работает с currentWeightLog и облаком)
+    function addOrUpdateWeight(date, weight, onComplete) {
+        let log = [...currentWeightLog];
         const existingIndex = log.findIndex(entry => entry.date === date);
         
-        let isUpdate = false;
-        // Если запись на эту дату уже существует
         if (existingIndex !== -1) {
             const userConfirmed = confirm(`Запись за ${date} уже существует (${log[existingIndex].weight} кг). Перезаписать?`);
             if (!userConfirmed) {
-                return false; // не обновляем
+                if (onComplete) onComplete(false);
+                return;
             }
-            // обновляем вес
             log[existingIndex].weight = weight;
-            isUpdate = true;
         } else {
-            // новая запись
             log.push({ date: date, weight: weight });
-            isUpdate = false;
         }
         
-        // сохраняем обновлённый массив
-        saveWeightLog(log);
-        
-        // Показываем уведомление "Молодец! Ты делаешь мир легче!"
-        showToast("🎉 Молодец! Ты делаешь мир легче!");
-        
-        return true;
+        // Сохраняем в облако
+        saveWeightLogToCloud(log, (success) => {
+            if (success) {
+                currentWeightLog = log;
+                showToast("🎉 Молодец! Ты делаешь мир легче!");
+                if (onComplete) onComplete(true);
+            } else {
+                showToast("❌ Ошибка сохранения. Попробуйте ещё раз.");
+                if (onComplete) onComplete(false);
+            }
+        });
     }
 
-    // Сброс всех данных (с подтверждением)
+    // Сбросить все данные
     function resetAllData() {
         const confirmReset = confirm("⚠️ ВНИМАНИЕ: все записи о весе будут удалены без возможности восстановления. Продолжить?");
         if (!confirmReset) return;
         
-        localStorage.removeItem(STORAGE_KEY);
-        // очищаем поле ошибки и сбрасываем форму
-        clearError();
-        weightInput.value = '';
-        setDefaultDate();
-        
-        // если статистика открыта — обновить её (покажет пустое состояние)
-        if (statsBlock.style.display !== 'none') {
-            renderStatistics();
-        }
+        saveWeightLogToCloud([], (success) => {
+            if (success) {
+                currentWeightLog = [];
+                weightInput.value = '';
+                setDefaultDate();
+                clearError();
+                if (statsBlock.style.display !== 'none') {
+                    renderStatistics();
+                }
+                showToast("🗑️ Все данные удалены");
+            } else {
+                showToast("Не удалось очистить данные");
+            }
+        });
     }
 
     // ---------- ОТРИСОВКА СТАТИСТИКИ (ТАБЛИЦА + ГРАФИК) ----------
     function renderStatistics() {
-        const log = getWeightLog();
+        const sortedLog = [...currentWeightLog].sort((a, b) => a.date.localeCompare(b.date));
         
-        // Сортируем по дате (от старых к новым)
-        const sortedLog = [...log].sort((a, b) => a.date.localeCompare(b.date));
-        
-        // Если данных нет — показываем информационное сообщение
         if (sortedLog.length === 0) {
             statsContent.innerHTML = `
                 <div class="no-data-message">
                     📭 Нет данных. Добавьте свой первый вес!
                 </div>
             `;
-            // уничтожаем старый график, если он есть
             if (weightChart) {
                 weightChart.destroy();
                 weightChart = null;
@@ -483,7 +492,6 @@
             return;
         }
         
-        // Формируем таблицу (она будет первой)
         let tableHtml = `
             <table class="weight-table">
                 <thead>
@@ -491,23 +499,18 @@
                 </thead>
                 <tbody>
         `;
-        
         for (let entry of sortedLog) {
             const weightFormatted = parseFloat(entry.weight).toFixed(1);
             tableHtml += `<tr><td>${entry.date}</td><td>${weightFormatted} кг</td></tr>`;
         }
         tableHtml += `</tbody></table>`;
-        
-        // Добавляем контейнер для графика (будет под таблицей)
         tableHtml += `<div class="chart-container"><canvas id="weightChartCanvas" width="400" height="250" style="max-width:100%; height:auto; background: transparent;"></canvas></div>`;
         
         statsContent.innerHTML = tableHtml;
         
-        // Подготовка данных для графика
         const labels = sortedLog.map(entry => entry.date);
         const weightsData = sortedLog.map(entry => entry.weight);
         
-        // Уничтожаем предыдущий график, если он существует
         if (weightChart) {
             weightChart.destroy();
             weightChart = null;
@@ -516,11 +519,8 @@
         const canvas = document.getElementById('weightChartCanvas');
         if (canvas) {
             const ctx = canvas.getContext('2d');
-            
-            // Вычисляем максимальное значение для оси Y (с небольшим запасом)
             const maxWeight = Math.max(...weightsData);
             const yMax = Math.ceil(maxWeight + 2);
-            
             weightChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -543,12 +543,7 @@
                     responsive: true,
                     maintainAspectRatio: true,
                     plugins: {
-                        legend: {
-                            labels: {
-                                color: '#eeeeee',
-                                font: { size: 12 }
-                            }
-                        },
+                        legend: { labels: { color: '#eeeeee', font: { size: 12 } } },
                         tooltip: {
                             backgroundColor: '#1e1e24',
                             titleColor: '#ffffff',
@@ -559,56 +554,26 @@
                     },
                     scales: {
                         x: {
-                            ticks: {
-                                color: '#ccccdd',
-                                maxRotation: 35,
-                                autoSkip: true,
-                                font: { size: 11 }
-                            },
-                            grid: {
-                                color: 'rgba(200, 200, 220, 0.1)'
-                            },
-                            title: {
-                                display: true,
-                                text: 'Дата',
-                                color: '#aaaacc'
-                            }
+                            ticks: { color: '#ccccdd', maxRotation: 35, autoSkip: true, font: { size: 11 } },
+                            grid: { color: 'rgba(200, 200, 220, 0.1)' },
+                            title: { display: true, text: 'Дата', color: '#aaaacc' }
                         },
                         y: {
-                            ticks: {
-                                color: '#ccccdd',
-                                stepSize: 5,
-                                callback: function(val) {
-                                    return val + ' кг';
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(200, 200, 220, 0.1)'
-                            },
-                            title: {
-                                display: true,
-                                text: 'Вес (кг)',
-                                color: '#aaaacc'
-                            },
-                            // ⬇️ Ось Y начинается с 70 кг (по требованию)
+                            ticks: { color: '#ccccdd', stepSize: 5, callback: (val) => val + ' кг' },
+                            grid: { color: 'rgba(200, 200, 220, 0.1)' },
+                            title: { display: true, text: 'Вес (кг)', color: '#aaaacc' },
                             min: 70,
-                            max: yMax > 70 ? yMax : 90,   // если все веса ниже 70, покажем до 90, чтобы графика не слипалась
-                            suggestedMin: 70,
-                            suggestedMax: yMax > 70 ? yMax + 2 : 92
+                            max: yMax > 70 ? yMax : 90,
+                            suggestedMin: 70
                         }
                     },
-                    layout: {
-                        padding: {
-                            top: 15,
-                            bottom: 10
-                        }
-                    }
+                    layout: { padding: { top: 15, bottom: 10 } }
                 }
             });
         }
     }
     
-    // ---------- ОБРАБОТЧИК СОХРАНЕНИЯ ВЕСА ----------
+    // ---------- ОБРАБОТЧИК СОХРАНЕНИЯ ----------
     function handleSaveWeight() {
         clearError();
         
@@ -617,8 +582,6 @@
             showWeightError("Введите вес (число)");
             return;
         }
-        
-        // замена запятой на точку для удобства
         weightRaw = weightRaw.replace(',', '.');
         const weightNum = parseFloat(weightRaw);
         
@@ -633,60 +596,36 @@
             return;
         }
         
-        // Проверка формата даты
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(selectedDate)) {
-            showWeightError("Неверный формат даты");
-            return;
-        }
-        
-        // Сохраняем / обновляем запись
-        const success = addOrUpdateWeight(selectedDate, weightNum);
-        if (success) {
-            // Очищаем поле веса, дату сбрасываем на сегодня
-            weightInput.value = '';
-            setDefaultDate();
-            clearError();
-            
-            // Если статистика открыта — обновляем её
-            refreshStatisticsIfVisible();
-            
-            // Визуальный фидбек кнопки
-            saveBtn.style.transform = 'scale(0.97)';
-            setTimeout(() => { saveBtn.style.transform = ''; }, 120);
-        } else {
-            // пользователь отменил перезапись — ничего не делаем
-        }
+        addOrUpdateWeight(selectedDate, weightNum, (success) => {
+            if (success) {
+                weightInput.value = '';
+                setDefaultDate();
+                clearError();
+                refreshStatisticsIfVisible();
+                saveBtn.style.transform = 'scale(0.97)';
+                setTimeout(() => { saveBtn.style.transform = ''; }, 120);
+            }
+        });
     }
     
-    // ---------- ПОКАЗАТЬ / ОБНОВИТЬ СТАТИСТИКУ ----------
     function handleShowStatistics() {
-        // Если блок скрыт — показываем и рендерим
         if (statsBlock.style.display === 'none') {
             statsBlock.style.display = 'block';
             renderStatistics();
         } else {
-            // Если уже виден — просто перерисовываем (обновляем данные)
             renderStatistics();
         }
     }
     
-    // ---------- ИНИЦИАЛИЗАЦИЯ И ОБРАБОТЧИКИ ----------
+    // ---------- ИНИЦИАЛИЗАЦИЯ (ЗАГРУЗКА ДАННЫХ ИЗ ОБЛАКА) ----------
     function init() {
-        // Установка сегодняшней даты по умолчанию
         setDefaultDate();
         
-        // Навешиваем обработчики (без инлайн)
         saveBtn.addEventListener('click', handleSaveWeight);
         showStatsBtn.addEventListener('click', handleShowStatistics);
         resetDataBtn.addEventListener('click', resetAllData);
         
-        // Обработка ввода веса: очистка ошибки при начале ввода
-        weightInput.addEventListener('input', () => {
-            clearError();
-        });
-        
-        // Доп. эстетика: если пользователь нажал enter в поле веса — сохранить
+        weightInput.addEventListener('input', () => clearError());
         weightInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -694,17 +633,25 @@
             }
         });
         
-        // Поддержка Telegram WebApp
+        // Расширяем WebApp и настраиваем цвета
         if (window.Telegram && Telegram.WebApp) {
             const tg = Telegram.WebApp;
-            tg.expand();   // расширение на весь экран
+            tg.expand();
             tg.enableClosingConfirmation();
             tg.setHeaderColor('#0f0f12');
             tg.setBackgroundColor('#0f0f12');
         }
+        
+        // Загружаем данные из CloudStorage и обновляем интерфейс
+        loadWeightLogFromCloud((log) => {
+            currentWeightLog = log;
+            // Если статистика была открыта до перезагрузки – обновим
+            if (statsBlock.style.display !== 'none') {
+                renderStatistics();
+            }
+        });
     }
     
-    // Запуск после полной загрузки DOM
     document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
