@@ -1,35 +1,33 @@
 import os
 import json
 import sqlite3
-from datetime import datetime, time, timedelta
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, request, jsonify
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
-import asyncio
 import threading
+import time
 
 # ---------- Конфигурация ----------
-TOKEN = os.getenv("BOT_TOKEN")  # установите переменную окружения
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # например, https://Hudeem_bot.onrender.com
-SYNC_SECRET = os.getenv("SYNC_SECRET", "default_secret_change_me")  # опционально
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN environment variable not set")
 
-# Flask приложение для приёма синхронизации
-flask_app = Flask(__name__)
-
-# SQLite
 DB_PATH = "users.db"
 
-# Глобальный бот и планировщик
+# Flask приложение
+flask_app = Flask(__name__)
+
+# Глобальные объекты
 bot_app = None
-scheduler = None
+scheduler = BackgroundScheduler()
 
 # ---------- Работа с БД ----------
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # Пользователи и их настройки
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         chat_id INTEGER PRIMARY KEY,
         daily_enabled INTEGER DEFAULT 0,
@@ -39,7 +37,6 @@ def init_db():
         weekly_time TEXT DEFAULT '19:00',
         last_sync TIMESTAMP
     )''')
-    # Веса пользователей
     c.execute('''CREATE TABLE IF NOT EXISTS weights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id INTEGER,
@@ -102,50 +99,50 @@ def get_weights(chat_id, start_date=None, end_date=None):
     return [{"date": r[0], "weight": r[1]} for r in rows]
 
 # ---------- Уведомления ----------
-async def send_daily_reminder(chat_id: int, bot: Bot):
-    await bot.send_message(chat_id, "🔔 Новый день, новые достижения! Не забудь указать свой вес сегодня.")
+def send_daily_reminder(chat_id: int, bot: Bot):
+    try:
+        bot.send_message(chat_id, "🔔 Новый день, новые достижения! Не забудь указать свой вес сегодня.")
+    except Exception as e:
+        print(f"Error sending daily to {chat_id}: {e}")
 
-async def send_weekly_summary(chat_id: int, bot: Bot):
-    # Определяем последнюю неделю: понедельник - воскресенье (ISO неделя)
-    today = datetime.now().date()
-    # Найти последний понедельник
-    days_since_monday = today.weekday()  # 0=понедельник
-    monday = today - timedelta(days=days_since_monday)
-    sunday = monday + timedelta(days=6)
-    weights = get_weights(chat_id, monday.isoformat(), sunday.isoformat())
-    if not weights:
-        await bot.send_message(chat_id, "📊 За прошедшую неделю нет записей о весе. Начните записывать!")
-        return
-    # Создаём словарь по дням недели
-    weekdays = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
-    day_map = {}
-    for w in weights:
-        d = datetime.fromisoformat(w['date']).date()
-        if monday <= d <= sunday:
-            day_map[weekdays[d.weekday()]] = w['weight']
-    # Ищем вес в понедельник и воскресенье
-    mon_weight = day_map.get("ПН")
-    sun_weight = day_map.get("ВС")
-    diff_text = ""
-    if mon_weight and sun_weight:
-        diff = sun_weight - mon_weight
-        sign = "+" if diff > 0 else ""
-        diff_text = f"\nИзменение за неделю: {sign}{diff:.1f} кг"
-    elif mon_weight:
-        diff_text = f"\nВес в понедельник: {mon_weight:.1f} кг. Нет данных за воскресенье."
-    elif sun_weight:
-        diff_text = f"\nВес в воскресенье: {sun_weight:.1f} кг. Нет данных за понедельник."
-    else:
-        diff_text = "\nНет данных за понедельник или воскресенье."
-    # Построим таблицу
-    table = "📅 *Сводка за неделю:*\n"
-    for day in weekdays:
-        val = day_map.get(day)
-        table += f"{day}: {val:.1f} кг\n" if val else f"{day}: —\n"
-    await bot.send_message(chat_id, table + diff_text, parse_mode="Markdown")
+def send_weekly_summary(chat_id: int, bot: Bot):
+    try:
+        today = datetime.now().date()
+        days_since_monday = today.weekday()
+        monday = today - timedelta(days=days_since_monday)
+        sunday = monday + timedelta(days=6)
+        weights = get_weights(chat_id, monday.isoformat(), sunday.isoformat())
+        if not weights:
+            bot.send_message(chat_id, "📊 За прошедшую неделю нет записей о весе. Начните записывать!")
+            return
+        weekdays = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
+        day_map = {}
+        for w in weights:
+            d = datetime.fromisoformat(w['date']).date()
+            if monday <= d <= sunday:
+                day_map[weekdays[d.weekday()]] = w['weight']
+        mon_weight = day_map.get("ПН")
+        sun_weight = day_map.get("ВС")
+        diff_text = ""
+        if mon_weight and sun_weight:
+            diff = sun_weight - mon_weight
+            sign = "+" if diff > 0 else ""
+            diff_text = f"\nИзменение за неделю: {sign}{diff:.1f} кг"
+        elif mon_weight:
+            diff_text = f"\nВес в понедельник: {mon_weight:.1f} кг. Нет данных за воскресенье."
+        elif sun_weight:
+            diff_text = f"\nВес в воскресенье: {sun_weight:.1f} кг. Нет данных за понедельник."
+        else:
+            diff_text = "\nНет данных за понедельник или воскресенье."
+        table = "📅 *Сводка за неделю:*\n"
+        for day in weekdays:
+            val = day_map.get(day)
+            table += f"{day}: {val:.1f} кг\n" if val else f"{day}: —\n"
+        bot.send_message(chat_id, table + diff_text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"Error sending weekly to {chat_id}: {e}")
 
-# Планировщик: перезапуск заданий для всех пользователей
-async def reschedule_all_jobs():
+def reschedule_all_jobs():
     scheduler.remove_all_jobs()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -156,33 +153,42 @@ async def reschedule_all_jobs():
         if daily_en:
             hour, minute = map(int, daily_t.split(':'))
             trigger = CronTrigger(hour=hour, minute=minute)
-            scheduler.add_job(send_daily_reminder, trigger, args=(chat_id, bot_app.bot), id=f"daily_{chat_id}", replace_existing=True)
+            scheduler.add_job(
+                send_daily_reminder,
+                trigger,
+                args=[chat_id, bot_app.bot],
+                id=f"daily_{chat_id}",
+                replace_existing=True
+            )
         if weekly_en:
             hour, minute = map(int, weekly_t.split(':'))
-            # день недели: 0=понедельник ... 6=воскресенье
             trigger = CronTrigger(day_of_week=weekly_day, hour=hour, minute=minute)
-            scheduler.add_job(send_weekly_summary, trigger, args=(chat_id, bot_app.bot), id=f"weekly_{chat_id}", replace_existing=True)
+            scheduler.add_job(
+                send_weekly_summary,
+                trigger,
+                args=[chat_id, bot_app.bot],
+                id=f"weekly_{chat_id}",
+                replace_existing=True
+            )
 
 # ---------- Telegram команды ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    # Регистрируем пользователя (если нет)
     if get_user_settings(chat_id) is None:
         set_user_settings(chat_id, {"daily_enabled": False, "daily_time": "19:00", "weekly_enabled": False, "weekly_day": 6, "weekly_time": "19:00"})
         await update.message.reply_text("👋 Добро пожаловать! Вы будете получать уведомления о весе. Настройте их в Mini App.")
     else:
         await update.message.reply_text("✅ Вы уже зарегистрированы. Используйте Mini App для управления весом и настройками.")
-    # Отправим ссылку на Mini App (замените YOUR_BOT_USERNAME)
+    # Замените YOUR_BOT_USERNAME на реальное имя бота (без @)
     await update.message.reply_text("📱 Откройте Mini App: https://t.me/YOUR_BOT_USERNAME/startapp")
 
-# ---------- Flask эндпоинт для синхронизации ----------
+# ---------- Flask эндпоинт ----------
 @flask_app.route('/sync', methods=['POST'])
 def sync():
     data = request.json
     chat_id = data.get('chat_id')
     if not chat_id:
         return jsonify({"error": "no chat_id"}), 400
-    # (опционально проверка секрета)
     if data.get('type') == 'weight':
         date = data.get('date')
         weight = data.get('weight')
@@ -192,10 +198,8 @@ def sync():
         settings = data.get('settings')
         if settings:
             set_user_settings(chat_id, settings)
-            # Перепланируем уведомления для этого пользователя
-            asyncio.run_coroutine_threadsafe(reschedule_all_jobs(), bot_app.application.update_queue._loop)
+            reschedule_all_jobs()
     elif data.get('type') == 'reset':
-        # удаляем все веса пользователя
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("DELETE FROM weights WHERE chat_id = ?", (chat_id,))
@@ -203,41 +207,28 @@ def sync():
         conn.close()
     return jsonify({"status": "ok"})
 
+@flask_app.route('/health', methods=['GET'])
+def health():
+    return "OK", 200
+
 def run_flask():
     flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 
 # ---------- Основная функция ----------
 def main():
-    global bot_app, scheduler
+    global bot_app
     init_db()
     # Создаём бота
     application = Application.builder().token(TOKEN).build()
     bot_app = application
     application.add_handler(CommandHandler("start", start))
     # Запускаем планировщик
-    scheduler = AsyncIOScheduler()
-    # Загружаем задания после старта
-    async def on_startup():
-        await reschedule_all_jobs()
-    application.job_queue = None  # не используем встроенный, используем apscheduler
+    scheduler.start()
+    # Загружаем задания
+    reschedule_all_jobs()
     # Запускаем Flask в отдельном потоке
     threading.Thread(target=run_flask, daemon=True).start()
-    # Установка вебхука (если задан WEBHOOK_URL)
-    if WEBHOOK_URL:
-        application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-        # Тогда нужно добавить обработчик вебхука во Flask
-        @flask_app.route('/webhook', methods=['POST'])
-        async def webhook():
-            update = Update.de_json(request.get_json(), application.bot)
-            await application.process_update(update)
-            return "ok"
-        print(f"Webhook set to {WEBHOOK_URL}/webhook")
-    else:
-        # Иначе используем polling
-        print("No WEBHOOK_URL, using polling")
-    # Запускаем планировщик
-    scheduler.start()
-    # Запускаем бота
+    # Запускаем бота в режиме polling (не блокирует Flask)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
