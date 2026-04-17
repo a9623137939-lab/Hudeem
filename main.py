@@ -1,31 +1,36 @@
 import os
-import json
-import sqlite3
-from datetime import datetime, timedelta
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-from flask import Flask, request, jsonify
-from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes
-import threading
-import time
+import sys
+import traceback
 
-# ---------- Конфигурация ----------
+try:
+    import sqlite3
+    from datetime import datetime, timedelta
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from flask import Flask, request, jsonify
+    from telegram import Update, Bot
+    from telegram.ext import Application, CommandHandler, ContextTypes
+    import threading
+except ImportError as e:
+    print(f"Import error: {e}")
+    sys.exit(1)
+
+print("Imports OK")
+
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
-    raise ValueError("BOT_TOKEN environment variable not set")
+    print("ERROR: BOT_TOKEN not set")
+    sys.exit(1)
 
 DB_PATH = "users.db"
+print(f"TOKEN loaded, DB path: {DB_PATH}")
 
-# Flask приложение
 flask_app = Flask(__name__)
-
-# Глобальные объекты
 bot_app = None
 scheduler = BackgroundScheduler()
 
-# ---------- Работа с БД ----------
 def init_db():
+    print("Initializing DB...")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -46,6 +51,7 @@ def init_db():
     )''')
     conn.commit()
     conn.close()
+    print("DB ready")
 
 def get_user_settings(chat_id):
     conn = sqlite3.connect(DB_PATH)
@@ -98,7 +104,6 @@ def get_weights(chat_id, start_date=None, end_date=None):
     conn.close()
     return [{"date": r[0], "weight": r[1]} for r in rows]
 
-# ---------- Уведомления ----------
 def send_daily_reminder(chat_id: int, bot: Bot):
     try:
         bot.send_message(chat_id, "🔔 Новый день, новые достижения! Не забудь указать свой вес сегодня.")
@@ -143,6 +148,7 @@ def send_weekly_summary(chat_id: int, bot: Bot):
         print(f"Error sending weekly to {chat_id}: {e}")
 
 def reschedule_all_jobs():
+    print("Rescheduling all jobs...")
     scheduler.remove_all_jobs()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -170,8 +176,8 @@ def reschedule_all_jobs():
                 id=f"weekly_{chat_id}",
                 replace_existing=True
             )
+    print("Rescheduling done")
 
-# ---------- Telegram команды ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if get_user_settings(chat_id) is None:
@@ -179,10 +185,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("👋 Добро пожаловать! Вы будете получать уведомления о весе. Настройте их в Mini App.")
     else:
         await update.message.reply_text("✅ Вы уже зарегистрированы. Используйте Mini App для управления весом и настройками.")
-    # Замените YOUR_BOT_USERNAME на реальное имя бота (без @)
+    # Замените YOUR_BOT_USERNAME на реальное имя бота
     await update.message.reply_text("📱 Откройте Mini App: https://t.me/YOUR_BOT_USERNAME/startapp")
 
-# ---------- Flask эндпоинт ----------
 @flask_app.route('/sync', methods=['POST'])
 def sync():
     data = request.json
@@ -214,22 +219,27 @@ def health():
 def run_flask():
     flask_app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 
-# ---------- Основная функция ----------
 def main():
     global bot_app
+    print("Starting main()")
     init_db()
-    # Создаём бота
+    print("Creating application...")
     application = Application.builder().token(TOKEN).build()
     bot_app = application
     application.add_handler(CommandHandler("start", start))
-    # Запускаем планировщик
+    print("Starting scheduler...")
     scheduler.start()
-    # Загружаем задания
+    print("Rescheduling jobs...")
     reschedule_all_jobs()
-    # Запускаем Flask в отдельном потоке
+    print("Starting Flask thread...")
     threading.Thread(target=run_flask, daemon=True).start()
-    # Запускаем бота в режиме polling (не блокирует Flask)
+    print("Starting polling...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print("FATAL ERROR:")
+        traceback.print_exc()
+        sys.exit(1)
