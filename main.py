@@ -12,7 +12,7 @@ import threading
 
 # ---------- Конфигурация ----------
 TOKEN = os.getenv("BOT_TOKEN")  # установите переменную окружения
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # например, https://ваш-бот.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # например, https://Hudeem_bot.onrender.com
 SYNC_SECRET = os.getenv("SYNC_SECRET", "default_secret_change_me")  # опционально
 
 # Flask приложение для приёма синхронизации
