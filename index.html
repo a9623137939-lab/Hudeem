@@ -127,9 +127,25 @@
             text-align: center;
             color: #aaaaaa;
         }
-        .weight-table { width: 100%; border-collapse: collapse; margin-bottom: 28px; border-radius: 18px; overflow: hidden; }
-        .weight-table th, .weight-table td { text-align: left; padding: 12px; border-bottom: 1px solid #2e2e38; }
-        .weight-table th { background-color: #2a2a32; color: #cbcbff; }
+        .weight-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 28px;
+            border-radius: 18px;
+            overflow: hidden;
+            font-size: 13px; /* уменьшен шрифт */
+        }
+        .weight-table th, .weight-table td {
+            text-align: left;
+            padding: 10px 8px;
+            border-bottom: 1px solid #2e2e38;
+            white-space: nowrap; /* дата в одну строку */
+        }
+        .weight-table th {
+            background-color: #2a2a32;
+            color: #cbcbff;
+            font-size: 13px;
+        }
         .chart-container { margin-top: 12px; height: 260px; width: 100%; }
         .girth-chart-container { margin-top: 28px; height: 260px; width: 100%; }
         hr { border-color: #2e2e38; margin: 16px 0; }
@@ -157,6 +173,7 @@
             body { padding: 16px 12px 32px; }
             button { padding: 10px 14px; }
             .header-row { flex-direction: column; align-items: flex-start; }
+            .weight-table th, .weight-table td { font-size: 11px; padding: 6px 4px; }
         }
         .collapsible-header {
             display: flex;
@@ -389,6 +406,7 @@
             } else {
                 currentWeightLog = [];
             }
+            if (statsBlock.style.display !== 'none') renderStatistics();
         });
         loadFromCloud(NOTIF_KEY, (settings) => {
             if (settings) {
@@ -404,6 +422,7 @@
             girthMode = mode === true;
             girthToggle.checked = girthMode;
             girthGroup.style.display = girthMode ? 'block' : 'none';
+            if (statsBlock.style.display !== 'none') renderStatistics();
         });
     }
 
@@ -456,8 +475,10 @@
         girthGroup.style.display = girthMode ? 'block' : 'none';
         if (!girthMode) {
             clearGirthError();
-            girthInput.value = '';
+            if (girthInput) girthInput.value = '';
         }
+        // Перерисовать статистику, чтобы скрыть/показать столбец и график
+        if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
     // Отправка данных на сервер бота
@@ -490,26 +511,26 @@
         return `${day}.${month}`;
     }
 
-    // Динамические настройки оси Y для веса
+    // Динамические настройки оси Y для веса (только целые, шаг 1)
     function getWeightYScale(data) {
         const weights = data.map(d => d.weight).filter(w => w !== null && !isNaN(w));
-        if (weights.length === 0) return { min: 70, max: 100, stepSize: 3 };
+        if (weights.length === 0) return { min: 60, max: 100, stepSize: 1 };
         let minWeight = Math.min(...weights);
         let maxWeight = Math.max(...weights);
-        let minY = Math.max(0, minWeight - 5);
-        let maxY = maxWeight + 5;
-        return { min: minY, max: maxY, stepSize: 3 };
+        let minY = Math.floor(minWeight - 5);
+        let maxY = Math.ceil(maxWeight + 5);
+        return { min: minY, max: maxY, stepSize: 1 };
     }
 
-    // Динамические настройки оси Y для охвата
+    // Динамические настройки оси Y для охвата (только целые, шаг 1)
     function getGirthYScale(data) {
         const girths = data.map(d => d.girth).filter(g => g !== null && !isNaN(g));
-        if (girths.length === 0) return { min: 50, max: 150, stepSize: 3 };
+        if (girths.length === 0) return { min: 50, max: 150, stepSize: 1 };
         let minGirth = Math.min(...girths);
         let maxGirth = Math.max(...girths);
-        let minY = Math.max(0, minGirth - 5);
-        let maxY = maxGirth + 5;
-        return { min: minY, max: maxY, stepSize: 3 };
+        let minY = Math.floor(minGirth - 5);
+        let maxY = Math.ceil(maxGirth + 5);
+        return { min: minY, max: maxY, stepSize: 1 };
     }
 
     function renderStatistics() {
@@ -520,18 +541,31 @@
             if (girthChart) { girthChart.destroy(); girthChart = null; }
             return;
         }
-        // Таблица
-        let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th><th>📏 Охват (см)</th></tr></thead><tbody>`;
+        
+        // Таблица: если girthMode выключен, не показываем столбец охвата
+        let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
+        if (girthMode) html += `<th>📏 Охват (см)</th>`;
+        html += `</tr></thead><tbody>`;
         sorted.forEach(e => {
             const weightStr = e.weight !== null ? parseFloat(e.weight).toFixed(1) : '—';
-            const girthStr = (e.girth !== null && e.girth !== undefined) ? parseFloat(e.girth).toFixed(1) : '—';
-            html += `<tr><td>${e.date}</td><td>${weightStr} кг</td><td>${girthStr} см</td></tr>`;
+            html += `<tr><td>${e.date}</td><td>${weightStr} кг</td>`;
+            if (girthMode) {
+                const girthStr = (e.girth !== null && e.girth !== undefined) ? parseFloat(e.girth).toFixed(1) : '—';
+                html += `<td>${girthStr} см</td>`;
+            }
+            html += `</tr>`;
         });
         html += `</tbody></table>`;
         
-        // Контейнеры для графиков
+        // График веса всегда
         html += `<div class="chart-container"><canvas id="weightChartCanvas"></canvas></div>`;
-        html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
+        
+        // График охвата только если включён режим и есть данные охвата
+        if (girthMode) {
+            html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
+        } else {
+            html += `<div class="girth-chart-container" style="display: none;"></div>`;
+        }
         statsContent.innerHTML = html;
         
         // График веса
@@ -543,26 +577,33 @@
         weightChart = new Chart(weightCtx, {
             type: 'line',
             data: { labels: weightLabels, datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
-            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize }, min: weightScale.min, max: weightScale.max } } }
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: function(val) { if (Number.isInteger(val)) return val; } }, min: weightScale.min, max: weightScale.max } } }
         });
         
-        // График охвата (только если есть данные)
-        const girthCtx = document.getElementById('girthChartCanvas').getContext('2d');
-        if (girthChart) girthChart.destroy();
-        const girthEntries = sorted.filter(e => e.girth !== null && e.girth !== undefined && !isNaN(e.girth));
-        if (girthEntries.length === 0) {
-            // Показать сообщение в canvas
-            const canvasContainer = document.querySelector('.girth-chart-container');
-            canvasContainer.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
-        } else {
-            const girthLabels = girthEntries.map(e => formatDateForChart(e.date));
-            const girthData = girthEntries.map(e => e.girth);
-            const girthScale = getGirthYScale(girthEntries);
-            girthChart = new Chart(girthCtx, {
-                type: 'line',
-                data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
-                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize }, min: girthScale.min, max: girthScale.max } } }
-            });
+        // График охвата (только если режим включён)
+        if (girthMode) {
+            const girthCtx = document.getElementById('girthChartCanvas');
+            if (girthCtx) {
+                const ctx = girthCtx.getContext('2d');
+                if (girthChart) girthChart.destroy();
+                const girthEntries = sorted.filter(e => e.girth !== null && e.girth !== undefined && !isNaN(e.girth));
+                if (girthEntries.length === 0) {
+                    const container = document.querySelector('.girth-chart-container');
+                    if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
+                } else {
+                    const girthLabels = girthEntries.map(e => formatDateForChart(e.date));
+                    const girthData = girthEntries.map(e => e.girth);
+                    const girthScale = getGirthYScale(girthEntries);
+                    girthChart = new Chart(ctx, {
+                        type: 'line',
+                        data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
+                        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: function(val) { if (Number.isInteger(val)) return val; } }, min: girthScale.min, max: girthScale.max } } }
+                    });
+                }
+            }
+        } else if (girthChart) {
+            girthChart.destroy();
+            girthChart = null;
         }
     }
 
