@@ -133,13 +133,13 @@
             margin-bottom: 28px;
             border-radius: 18px;
             overflow: hidden;
-            font-size: 13px; /* уменьшен шрифт */
+            font-size: 13px;
         }
         .weight-table th, .weight-table td {
             text-align: left;
             padding: 10px 8px;
             border-bottom: 1px solid #2e2e38;
-            white-space: nowrap; /* дата в одну строку */
+            white-space: nowrap;
         }
         .weight-table th {
             background-color: #2a2a32;
@@ -305,15 +305,15 @@
 </div>
 
 <script>
-    // ---------- Конфигурация ----------
-    const BACKEND_URL = "https://a9623137939-lab.github.io/Hudeem/"; // замените на адрес вашего бота
+    // ---------- КОНФИГУРАЦИЯ ----------
+    const BACKEND_URL = "https://koligalex.pythonanywhere.com";   // твой сервер
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
     const GIRTH_MODE_KEY = "girthMode";
 
     let weightChart = null;
     let girthChart = null;
-    let currentWeightLog = []; // элементы: {date, weight, girth?}
+    let currentWeightLog = [];
     let notifSettings = { dailyEnabled: false, dailyTime: "19:00", weeklyEnabled: false, weeklyDay: 6, weeklyTime: "19:00" };
     let girthMode = false;
 
@@ -477,13 +477,12 @@
             clearGirthError();
             if (girthInput) girthInput.value = '';
         }
-        // Перерисовать статистику, чтобы скрыть/показать столбец и график
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
     // Отправка данных на сервер бота
     async function syncToBackend(payload) {
-        if (!BACKEND_URL || BACKEND_URL === "https://a9623137939-lab.github.io/Hudeem/") return;
+        if (!BACKEND_URL || BACKEND_URL === "https://koligalex.pythonanywhere.com") return;
         const tg = window.Telegram?.WebApp;
         const chatId = tg?.initDataUnsafe?.user?.id;
         if (!chatId) return;
@@ -501,7 +500,7 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    // Форматирование даты для оси X: день.месяц (17.апр)
+    // Форматирование даты для оси X: день.месяц
     function formatDateForChart(dateStr) {
         const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
         const date = new Date(dateStr);
@@ -511,7 +510,6 @@
         return `${day}.${month}`;
     }
 
-    // Динамические настройки оси Y для веса (только целые, шаг 1)
     function getWeightYScale(data) {
         const weights = data.map(d => d.weight).filter(w => w !== null && !isNaN(w));
         if (weights.length === 0) return { min: 60, max: 100, stepSize: 1 };
@@ -522,7 +520,6 @@
         return { min: minY, max: maxY, stepSize: 1 };
     }
 
-    // Динамические настройки оси Y для охвата (только целые, шаг 1)
     function getGirthYScale(data) {
         const girths = data.map(d => d.girth).filter(g => g !== null && !isNaN(g));
         if (girths.length === 0) return { min: 50, max: 150, stepSize: 1 };
@@ -542,7 +539,6 @@
             return;
         }
         
-        // Таблица: если girthMode выключен, не показываем столбец охвата
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
         html += `</tr></thead><tbody>`;
@@ -556,11 +552,7 @@
             html += `</tr>`;
         });
         html += `</tbody></table>`;
-        
-        // График веса всегда
         html += `<div class="chart-container"><canvas id="weightChartCanvas"></canvas></div>`;
-        
-        // График охвата только если включён режим и есть данные охвата
         if (girthMode) {
             html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
         } else {
@@ -568,7 +560,6 @@
         }
         statsContent.innerHTML = html;
         
-        // График веса
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
         const weightLabels = sorted.map(e => formatDateForChart(e.date));
@@ -580,7 +571,6 @@
             options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: function(val) { if (Number.isInteger(val)) return val; } }, min: weightScale.min, max: weightScale.max } } }
         });
         
-        // График охвата (только если режим включён)
         if (girthMode) {
             const girthCtx = document.getElementById('girthChartCanvas');
             if (girthCtx) {
@@ -675,7 +665,6 @@
             tg.setBackgroundColor('#0f0f12');
         }
         loadAllData();
-        // Блок свёрнут по умолчанию
         isExpanded = false;
         notifContent.classList.remove('show');
         headerArrow.classList.remove('up');
