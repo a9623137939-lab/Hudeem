@@ -148,7 +148,6 @@
         }
         .chart-container { margin-top: 12px; height: 260px; width: 100%; }
         .girth-chart-container { margin-top: 28px; height: 260px; width: 100%; }
-        hr { border-color: #2e2e38; margin: 16px 0; }
         .toast-notification {
             position: fixed;
             bottom: 30px;
@@ -220,9 +219,7 @@
             border-radius: 16px;
             padding: 10px;
         }
-        .girth-field {
-            transition: all 0.2s ease;
-        }
+        .girth-field { transition: all 0.2s ease; }
     </style>
 </head>
 <body>
@@ -258,7 +255,6 @@
         </div>
     </div>
 
-    <!-- Сворачиваемый блок настроек уведомлений -->
     <div class="card">
         <div class="collapsible-header" id="notifHeader">
             <div class="title"><span>🔔</span> Настройка уведомлений</div>
@@ -306,7 +302,7 @@
 
 <script>
     // ---------- Конфигурация ----------
-    const BACKEND_URL = https://weight-bot-fjvu.onrender.com; // замените на адрес вашего бота
+    const BACKEND_URL = "https://a9623137939-lab.github.io/Hudeem/"; // старый адрес (без сервера)
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
     const GIRTH_MODE_KEY = "girthMode";
@@ -337,7 +333,6 @@
     const weeklyTimeInput = document.getElementById('weeklyTime');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 
-    // Элементы сворачивания
     const notifHeader = document.getElementById('notifHeader');
     const notifContent = document.getElementById('notifContent');
     const headerArrow = document.getElementById('headerArrow');
@@ -355,7 +350,6 @@
     }
     notifHeader.addEventListener('click', toggleNotifications);
 
-    // ---------- Вспомогательные функции ----------
     function getTodayDate() {
         const today = new Date();
         const year = today.getFullYear();
@@ -385,7 +379,6 @@
     function isValidWeight(w) { return !isNaN(w) && w >= 20 && w <= 300; }
     function isValidGirth(g) { return !isNaN(g) && g >= 30 && g <= 300; }
 
-    // CloudStorage
     function loadFromCloud(key, callback) {
         if (!window.Telegram?.WebApp?.CloudStorage) return callback(null);
         Telegram.WebApp.CloudStorage.getItem(key, (err, val) => {
@@ -398,14 +391,10 @@
         Telegram.WebApp.CloudStorage.setItem(key, JSON.stringify(data), (err) => callback?.(!err));
     }
 
-    // Загрузка весов, настроек, режима охвата
     function loadAllData() {
         loadFromCloud(STORAGE_KEY, (log) => {
-            if (log) {
-                currentWeightLog = log.map(entry => ({ ...entry, girth: entry.girth !== undefined ? entry.girth : null }));
-            } else {
-                currentWeightLog = [];
-            }
+            if (log) currentWeightLog = log.map(entry => ({ ...entry, girth: entry.girth !== undefined ? entry.girth : null }));
+            else currentWeightLog = [];
             if (statsBlock.style.display !== 'none') renderStatistics();
         });
         loadFromCloud(NOTIF_KEY, (settings) => {
@@ -426,46 +415,28 @@
         });
     }
 
-    // ---------- ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ ----------
     function addOrUpdateWeight(date, weight, girth = null) {
         let log = [...currentWeightLog];
         const idx = log.findIndex(e => e.date === date);
-        
-        // Если запись уже существует, спросить подтверждение
         if (idx !== -1) {
-            let confirmMsg = `Запись за ${date} уже существует (${log[idx].weight} кг)`;
-            if (log[idx].girth !== undefined && log[idx].girth !== null) {
-                confirmMsg += `, охват ${log[idx].girth} см`;
-            }
-            if (!confirm(`${confirmMsg}. Перезаписать?`)) return false;
+            let msg = `Запись за ${date} уже существует (${log[idx].weight} кг)`;
+            if (log[idx].girth) msg += `, охват ${log[idx].girth} см`;
+            if (!confirm(`${msg}. Перезаписать?`)) return false;
         }
-        
-        const newEntry = { 
-            date, 
-            weight, 
-            girth: (girth !== null && !isNaN(girth) && girth !== '') ? parseFloat(girth) : null 
-        };
-        
-        if (idx !== -1) {
-            log[idx] = newEntry;
-        } else {
-            log.push(newEntry);
-        }
-        
+        const newEntry = { date, weight, girth: (girth !== null && !isNaN(girth) && girth !== '') ? parseFloat(girth) : null };
+        if (idx !== -1) log[idx] = newEntry;
+        else log.push(newEntry);
         saveToCloud(STORAGE_KEY, log, (ok) => {
             if (ok) {
                 currentWeightLog = log;
                 showToast("🎉 Данные сохранены!");
                 refreshStatisticsIfVisible();
                 syncToBackend({ type: 'weight', date, weight, girth: newEntry.girth });
-            } else {
-                showToast("Ошибка сохранения");
-            }
+            } else showToast("Ошибка сохранения");
         });
         return true;
     }
 
-    // Сохранение настроек уведомлений
     function saveNotificationSettings() {
         notifSettings = {
             dailyEnabled: dailyEnabledChk.checked,
@@ -482,7 +453,6 @@
         });
     }
 
-    // Сохранение режима охвата
     function saveGirthMode(enabled) {
         girthMode = enabled;
         saveToCloud(GIRTH_MODE_KEY, girthMode);
@@ -494,18 +464,16 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    // Отправка данных на сервер бота
     async function syncToBackend(payload) {
         if (!BACKEND_URL || BACKEND_URL === "https://a9623137939-lab.github.io/Hudeem/") return;
         const tg = window.Telegram?.WebApp;
         const chatId = tg?.initDataUnsafe?.user?.id;
         if (!chatId) return;
-        const fullPayload = { chat_id: chatId, ...payload };
         try {
             await fetch(`${BACKEND_URL}/sync`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(fullPayload)
+                body: JSON.stringify({ chat_id: chatId, ...payload })
             });
         } catch(e) { console.warn("Sync error", e); }
     }
@@ -514,14 +482,11 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    // Форматирование даты для оси X
     function formatDateForChart(dateStr) {
         const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return dateStr;
-        const day = date.getDate();
-        const month = months[date.getMonth()];
-        return `${day}.${month}`;
+        return `${date.getDate()}.${months[date.getMonth()]}`;
     }
 
     function getWeightYScale(data) {
@@ -529,9 +494,7 @@
         if (weights.length === 0) return { min: 60, max: 100, stepSize: 1 };
         let minWeight = Math.min(...weights);
         let maxWeight = Math.max(...weights);
-        let minY = Math.floor(minWeight - 5);
-        let maxY = Math.ceil(maxWeight + 5);
-        return { min: minY, max: maxY, stepSize: 1 };
+        return { min: Math.floor(minWeight - 5), max: Math.ceil(maxWeight + 5), stepSize: 1 };
     }
 
     function getGirthYScale(data) {
@@ -539,9 +502,7 @@
         if (girths.length === 0) return { min: 50, max: 150, stepSize: 1 };
         let minGirth = Math.min(...girths);
         let maxGirth = Math.max(...girths);
-        let minY = Math.floor(minGirth - 5);
-        let maxY = Math.ceil(maxGirth + 5);
-        return { min: minY, max: maxY, stepSize: 1 };
+        return { min: Math.floor(minGirth - 5), max: Math.ceil(maxGirth + 5), stepSize: 1 };
     }
 
     function renderStatistics() {
@@ -552,28 +513,20 @@
             if (girthChart) { girthChart.destroy(); girthChart = null; }
             return;
         }
-        
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
         html += `</tr></thead><tbody>`;
         sorted.forEach(e => {
-            const weightStr = e.weight !== null ? parseFloat(e.weight).toFixed(1) : '—';
-            html += `<tr><td>${e.date}</td><td>${weightStr} кг</td>`;
-            if (girthMode) {
-                const girthStr = (e.girth !== null && e.girth !== undefined) ? parseFloat(e.girth).toFixed(1) : '—';
-                html += `<td>${girthStr} см</td>`;
-            }
+            html += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td>`;
+            if (girthMode) html += `<td>${e.girth ? e.girth.toFixed(1)+' см' : '—'}</td>`;
             html += `</tr>`;
         });
         html += `</tbody></table>`;
         html += `<div class="chart-container"><canvas id="weightChartCanvas"></canvas></div>`;
-        if (girthMode) {
-            html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
-        } else {
-            html += `<div class="girth-chart-container" style="display: none;"></div>`;
-        }
+        if (girthMode) html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
+        else html += `<div class="girth-chart-container" style="display: none;"></div>`;
         statsContent.innerHTML = html;
-        
+
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
         const weightLabels = sorted.map(e => formatDateForChart(e.date));
@@ -582,18 +535,17 @@
         weightChart = new Chart(weightCtx, {
             type: 'line',
             data: { labels: weightLabels, datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
-            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: function(val) { if (Number.isInteger(val)) return val; } }, min: weightScale.min, max: weightScale.max } } }
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max } } }
         });
-        
+
         if (girthMode) {
             const girthCtx = document.getElementById('girthChartCanvas');
             if (girthCtx) {
                 const ctx = girthCtx.getContext('2d');
                 if (girthChart) girthChart.destroy();
-                const girthEntries = sorted.filter(e => e.girth !== null && e.girth !== undefined && !isNaN(e.girth));
+                const girthEntries = sorted.filter(e => e.girth !== null && !isNaN(e.girth));
                 if (girthEntries.length === 0) {
-                    const container = document.querySelector('.girth-chart-container');
-                    if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
+                    document.querySelector('.girth-chart-container').innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
                 } else {
                     const girthLabels = girthEntries.map(e => formatDateForChart(e.date));
                     const girthData = girthEntries.map(e => e.girth);
@@ -601,31 +553,22 @@
                     girthChart = new Chart(ctx, {
                         type: 'line',
                         data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
-                        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: function(val) { if (Number.isInteger(val)) return val; } }, min: girthScale.min, max: girthScale.max } } }
+                        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max } } }
                     });
                 }
             }
-        } else if (girthChart) {
-            girthChart.destroy();
-            girthChart = null;
-        }
+        } else if (girthChart) { girthChart.destroy(); girthChart = null; }
     }
 
     function resetAllData() {
         if (!confirm("Удалить все записи о весе и охватах?")) return;
         saveToCloud(STORAGE_KEY, [], (ok) => {
-            if (ok) {
-                currentWeightLog = [];
-                showToast("Все данные удалены");
-                refreshStatisticsIfVisible();
-                syncToBackend({ type: 'reset' });
-            }
+            if (ok) { currentWeightLog = []; showToast("Все данные удалены"); refreshStatisticsIfVisible(); syncToBackend({ type: 'reset' }); }
         });
     }
 
     function handleSaveWeight() {
-        clearWeightError();
-        clearGirthError();
+        clearWeightError(); clearGirthError();
         let raw = weightInput.value.trim();
         if (raw === "") { showWeightError("Введите вес"); return; }
         raw = raw.replace(',', '.');
@@ -633,7 +576,6 @@
         if (!isValidWeight(w)) { showWeightError("Вес от 20 до 300 кг"); return; }
         const date = dateInput.value;
         if (!date) { showWeightError("Выберите дату"); return; }
-        
         let girth = null;
         if (girthMode) {
             let rawGirth = girthInput.value.trim();
@@ -666,11 +608,7 @@
         if (girthInput) girthInput.oninput = clearGirthError;
         weightInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSaveWeight(); });
         if (girthInput) girthInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSaveWeight(); });
-        
-        girthToggle.addEventListener('change', (e) => {
-            saveGirthMode(e.target.checked);
-        });
-        
+        girthToggle.addEventListener('change', (e) => { saveGirthMode(e.target.checked); });
         if (window.Telegram?.WebApp) {
             const tg = Telegram.WebApp;
             tg.expand();
