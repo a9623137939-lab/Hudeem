@@ -302,7 +302,8 @@
 
 <script>
     // ---------- Конфигурация ----------
-    const BACKEND_URL = "https://a9623137939-lab.github.io/Hudeem/"; // старый адрес (без сервера)
+    // Адрес твоего сервера на Render
+    const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
     const GIRTH_MODE_KEY = "girthMode";
@@ -437,6 +438,36 @@
         return true;
     }
 
+    // Новая функция отправки на сервер (с обработкой ошибок)
+    async function syncToBackend(payload) {
+        if (!BACKEND_URL || BACKEND_URL === "https://a9623137939-lab.github.io/Hudeem/") {
+            console.log("syncToBackend: BACKEND_URL не настроен");
+            return;
+        }
+        const tg = window.Telegram?.WebApp;
+        const chatId = tg?.initDataUnsafe?.user?.id;
+        if (!chatId) {
+            console.log("syncToBackend: нет chat_id");
+            return;
+        }
+        const fullPayload = { chat_id: chatId, ...payload };
+        try {
+            const response = await fetch(`${BACKEND_URL}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fullPayload)
+            });
+            if (response.ok) {
+                console.log("syncToBackend: успешно отправлено");
+            } else {
+                console.warn("syncToBackend: сервер вернул", response.status);
+            }
+        } catch(e) {
+            console.warn("syncToBackend: ошибка отправки", e);
+        }
+    }
+
+    // Обновлённая функция сохранения настроек
     function saveNotificationSettings() {
         notifSettings = {
             dailyEnabled: dailyEnabledChk.checked,
@@ -449,7 +480,9 @@
             if (ok) {
                 showToast("Настройки уведомлений сохранены");
                 syncToBackend({ type: 'settings', settings: notifSettings });
-            } else showToast("Ошибка сохранения настроек");
+            } else {
+                showToast("Ошибка сохранения настроек локально");
+            }
         });
     }
 
@@ -462,20 +495,6 @@
             if (girthInput) girthInput.value = '';
         }
         if (statsBlock.style.display !== 'none') renderStatistics();
-    }
-
-    async function syncToBackend(payload) {
-        if (!BACKEND_URL || BACKEND_URL === "https://a9623137939-lab.github.io/Hudeem/") return;
-        const tg = window.Telegram?.WebApp;
-        const chatId = tg?.initDataUnsafe?.user?.id;
-        if (!chatId) return;
-        try {
-            await fetch(`${BACKEND_URL}/sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, ...payload })
-            });
-        } catch(e) { console.warn("Sync error", e); }
     }
 
     function refreshStatisticsIfVisible() {
@@ -515,7 +534,7 @@
         }
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `</tr></thead><tbody>`;
+        html += `</table></thead><tbody>`;
         sorted.forEach(e => {
             html += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td>`;
             if (girthMode) html += `<td>${e.girth ? e.girth.toFixed(1)+' см' : '—'}</td>`;
