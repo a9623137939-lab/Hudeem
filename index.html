@@ -133,18 +133,17 @@
             margin-bottom: 28px;
             border-radius: 18px;
             overflow: hidden;
-            font-size: 13px;
+            font-size: 14px;
         }
         .weight-table th, .weight-table td {
             text-align: left;
             padding: 10px 8px;
             border-bottom: 1px solid #2e2e38;
-            white-space: nowrap;
         }
         .weight-table th {
             background-color: #2a2a32;
             color: #cbcbff;
-            font-size: 13px;
+            font-size: 14px;
         }
         .chart-container { margin-top: 12px; height: 260px; width: 100%; }
         .girth-chart-container { margin-top: 28px; height: 260px; width: 100%; }
@@ -172,7 +171,7 @@
             body { padding: 16px 12px 32px; }
             button { padding: 10px 14px; }
             .header-row { flex-direction: column; align-items: flex-start; }
-            .weight-table th, .weight-table td { font-size: 11px; padding: 6px 4px; }
+            .weight-table th, .weight-table td { font-size: 12px; padding: 6px 4px; }
         }
         .collapsible-header {
             display: flex;
@@ -302,7 +301,6 @@
 
 <script>
     // ---------- Конфигурация ----------
-    // Адрес твоего сервера на Render
     const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
@@ -438,7 +436,6 @@
         return true;
     }
 
-    // Новая функция отправки на сервер (с обработкой ошибок)
     async function syncToBackend(payload) {
         if (!BACKEND_URL || BACKEND_URL === "https://a9623137939-lab.github.io/Hudeem/") {
             console.log("syncToBackend: BACKEND_URL не настроен");
@@ -467,7 +464,6 @@
         }
     }
 
-    // Обновлённая функция сохранения настроек
     function saveNotificationSettings() {
         notifSettings = {
             dailyEnabled: dailyEnabledChk.checked,
@@ -532,20 +528,34 @@
             if (girthChart) { girthChart.destroy(); girthChart = null; }
             return;
         }
-        let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
+
+        // Строим таблицу правильно
+        let html = `<table class="weight-table">`;
+        html += `<thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `</table></thead><tbody>`;
-        sorted.forEach(e => {
-            html += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td>`;
-            if (girthMode) html += `<td>${e.girth ? e.girth.toFixed(1)+' см' : '—'}</td>`;
+        html += `</tr></thead><tbody>`;
+
+        for (let e of sorted) {
+            html += `<tr>`;
+            html += `<td>${e.date}</td>`;
+            html += `<td>${e.weight.toFixed(1)} кг</td>`;
+            if (girthMode) {
+                let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
+                html += `<td>${girthText}</td>`;
+            }
             html += `</tr>`;
-        });
+        }
         html += `</tbody></table>`;
+
         html += `<div class="chart-container"><canvas id="weightChartCanvas"></canvas></div>`;
-        if (girthMode) html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
-        else html += `<div class="girth-chart-container" style="display: none;"></div>`;
+        if (girthMode) {
+            html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
+        } else {
+            html += `<div class="girth-chart-container" style="display: none;"></div>`;
+        }
         statsContent.innerHTML = html;
 
+        // График веса
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
         const weightLabels = sorted.map(e => formatDateForChart(e.date));
@@ -557,6 +567,7 @@
             options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max } } }
         });
 
+        // График охвата
         if (girthMode) {
             const girthCtx = document.getElementById('girthChartCanvas');
             if (girthCtx) {
@@ -564,7 +575,8 @@
                 if (girthChart) girthChart.destroy();
                 const girthEntries = sorted.filter(e => e.girth !== null && !isNaN(e.girth));
                 if (girthEntries.length === 0) {
-                    document.querySelector('.girth-chart-container').innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
+                    const container = document.querySelector('.girth-chart-container');
+                    if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
                 } else {
                     const girthLabels = girthEntries.map(e => formatDateForChart(e.date));
                     const girthData = girthEntries.map(e => e.girth);
