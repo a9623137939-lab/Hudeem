@@ -220,7 +220,7 @@
         }
         .girth-field { transition: all 0.2s ease; }
 
-        /* Модальное окно для еженедельного отчёта */
+        /* Модальное окно */
         .modal {
             display: none;
             position: fixed;
@@ -342,7 +342,7 @@
     </div>
 </div>
 
-<!-- Модальное окно для отчёта -->
+<!-- Модальное окно -->
 <div id="weeklyModal" class="modal">
     <div class="modal-content">
         <span class="modal-close" id="modalClose">&times;</span>
@@ -392,7 +392,6 @@
     const headerArrow = document.getElementById('headerArrow');
     let isExpanded = false;
 
-    // Закрытие модального окна
     modalClose.onclick = () => { modal.style.display = 'none'; };
     window.onclick = (event) => { if (event.target === modal) modal.style.display = 'none'; };
 
@@ -588,7 +587,7 @@
 
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `</tr></thead><tbody>`;
+        html += `<tr></thead><tbody>`;
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
@@ -680,15 +679,43 @@
         renderStatistics();
     }
 
-    // ---------- Еженедельный отчёт ----------
-    function updateWeeklyButtonDate() {
+    // ---------- Еженедельный отчёт (исправленная логика) ----------
+    function getReportWeek() {
+        // Возвращает объект { startDate, endDate, endDateFormatted }
+        // endDateFormatted – дата окончания недели (воскресенье) для отображения на кнопке
         const now = new Date();
-        // Последнее воскресенье (дата окончания недели)
-        const lastSunday = new Date(now);
-        lastSunday.setDate(now.getDate() - now.getDay()); // воскресенье (0)
+        const currentHour = now.getHours();
+        const currentMin = now.getMinutes();
+        const isSunday = now.getDay() === 0;
+        const isAfter2200 = (currentHour >= 22);
+        let endDate = new Date(now);
+        if (isSunday && isAfter2200) {
+            // сегодня воскресенье после 22:00 – отчёт за текущую неделю (которая закончилась)
+            // endDate = сегодня (воскресенье)
+            endDate = new Date(now);
+        } else {
+            // иначе отчёт за прошлую неделю: последнее воскресенье, которое было до сегодня
+            endDate = new Date(now);
+            endDate.setDate(now.getDate() - now.getDay()); // воскресенье текущей или прошлой недели? Если сегодня не воскресенье, получим прошлое воскресенье.
+            if (now.getDay() === 0 && !isAfter2200) {
+                // сегодня воскресенье, но ещё не 22:00 – берём прошлое воскресенье (7 дней назад)
+                endDate.setDate(endDate.getDate() - 7);
+            }
+        }
+        // Начало недели (понедельник) = endDate - 6 дней
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 6);
+        // Установка времени на начало/конец дня для корректного сравнения
+        startDate.setHours(0,0,0,0);
+        endDate.setHours(23,59,59,999);
         const options = { day: 'numeric', month: 'long' };
-        const dateStr = lastSunday.toLocaleDateString('ru-RU', options);
-        weeklyReportBtn.textContent = `📅 Еженедельный отчёт за ${dateStr}`;
+        const endDateFormatted = endDate.toLocaleDateString('ru-RU', options);
+        return { startDate, endDate, endDateFormatted };
+    }
+
+    function updateWeeklyButtonDate() {
+        const { endDateFormatted } = getReportWeek();
+        weeklyReportBtn.textContent = `📅 Еженедельный отчёт за ${endDateFormatted}`;
     }
 
     function generateWeeklyReport() {
@@ -698,39 +725,33 @@
             return;
         }
 
-        // Определяем начало и конец текущей недели (пн-вс) по МСК
-        const now = new Date();
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1)); // понедельник
-        startOfWeek.setHours(0,0,0,0);
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6); // воскресенье
-        endOfWeek.setHours(23,59,59,999);
-
-        // Фильтруем записи за неделю
+        const { startDate, endDate, endDateFormatted } = getReportWeek();
         const weekEntries = currentWeightLog.filter(entry => {
             const entryDate = new Date(entry.date);
-            return entryDate >= startOfWeek && entryDate <= endOfWeek;
+            return entryDate >= startDate && entryDate <= endDate;
         }).sort((a,b) => new Date(a.date) - new Date(b.date));
 
         if (weekEntries.length === 0) {
-            weeklyReportContent.innerHTML = `<div class="no-data-message">На этой неделе нет замеров. Добавьте вес, чтобы увидеть статистику.</div>`;
+            weeklyReportContent.innerHTML = `<div class="no-data-message">За неделю до ${endDateFormatted} нет замеров. Добавьте вес, чтобы увидеть статистику.</div>`;
             modal.style.display = 'flex';
             return;
         }
 
-        // Проверяем наличие замеров в пятницу, субботу, воскресенье
-        const weekdays = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
-        const requiredDays = ['пятница', 'суббота', 'воскресенье'];
+        // Проверка пропусков пятница, суббота, воскресенье
+        const requiredDayNames = ['пятница', 'суббота', 'воскресенье'];
         const missingDays = [];
-        for (let d of requiredDays) {
-            const dayIndex = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'].indexOf(d);
-            if (dayIndex === -1) continue;
+        for (let dayName of requiredDayNames) {
+            let dayIndex;
+            switch (dayName) {
+                case 'пятница': dayIndex = 5; break;
+                case 'суббота': dayIndex = 6; break;
+                case 'воскресенье': dayIndex = 0; break;
+                default: continue;
+            }
             const hasDay = weekEntries.some(entry => new Date(entry.date).getDay() === dayIndex);
-            if (!hasDay) missingDays.push(d);
+            if (!hasDay) missingDays.push(dayName);
         }
 
-        let summaryHtml = '';
         let diffHtml = '';
         if (missingDays.length > 0) {
             diffHtml = `<div class="weekly-summary-text" style="background-color:#3a2a2f;">⚠️ Ты пропустил замеры в ${missingDays.join(', ')}. Статистику сделать не получится.</div>`;
@@ -739,16 +760,16 @@
             const lastWeight = weekEntries[weekEntries.length-1].weight;
             const diff = lastWeight - firstWeight;
             const absDiff = Math.abs(diff).toFixed(1);
-            if (diff > 0) {
-                diffHtml = `<div class="weekly-summary-text">За эту неделю ты сделал мир легче на ${absDiff} кг. Поздравляю!</div>`;
-            } else if (diff < 0) {
+            if (diff < 0) {
                 diffHtml = `<div class="weekly-summary-text">К сожалению, твой вес за эту неделю стал больше на ${absDiff} кг. Не расстраивайся, у тебя всё получится!</div>`;
+            } else if (diff > 0) {
+                diffHtml = `<div class="weekly-summary-text">За эту неделю ты сделал мир легче на ${absDiff} кг. Поздравляю!</div>`;
             } else {
                 diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
             }
         }
 
-        // Таблица замеров за неделю
+        // Таблица
         let tableHtml = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
         for (let e of weekEntries) {
             tableHtml += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td></tr>`;
