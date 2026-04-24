@@ -137,14 +137,18 @@
             font-size: 14px;
         }
         .weight-table th, .weight-table td {
-            text-align: left;
+            text-align: center;
             padding: 10px 8px;
-            border-bottom: 1px solid #2e2e38;
+            border-bottom: 1px solid #c0d4e0;
         }
         .weight-table th {
-            background-color: #2a2a32;
-            color: #cbcbff;
+            background-color: #d4eaf3;
+            color: #1e1e24;
             font-size: 14px;
+        }
+        .weight-table td {
+            background-color: #ffffffcc;
+            color: #1e1e24;
         }
         .chart-container { margin-top: 12px; height: 260px; width: 100%; }
         .girth-chart-container { margin-top: 28px; height: 260px; width: 100%; }
@@ -235,7 +239,7 @@
             align-items: center;
         }
         .modal-content {
-            background-color: #e6f7ff; /* тёплый голубоватый фон */
+            background-color: #e6f7ff;
             border-radius: 24px;
             width: 90%;
             max-width: 500px;
@@ -286,20 +290,13 @@
             margin-bottom: 10px;
         }
         .big-number {
-            font-size: 26px;
+            font-size: 28px;
             font-weight: bold;
-            background: linear-gradient(135deg, #1e6f5c, #289672);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
+            color: #1e6f5c;
         }
         .inline-text {
             font-size: 16px;
             display: inline;
-        }
-        .line-break {
-            display: block;
-            margin-top: 4px;
         }
     </style>
 </head>
@@ -631,7 +628,7 @@
 
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `</tr></thead><tbody>`;
+        html += `<tr></thead><tbody>`;
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
@@ -825,9 +822,9 @@
             }
         }
 
-        let tableHtml = `<table class="weight-table" style="background: #ffffffaa;"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
+        let tableHtml = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
         for (let e of weekEntries) {
-            tableHtml += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td></tr>`;
+            tableHtml += `<tr><td style="text-align:center">${e.date}</td><td style="text-align:center">${e.weight.toFixed(1)} кг</td></tr>`;
         }
         tableHtml += `</tbody></table>`;
 
@@ -836,7 +833,6 @@
         modal.style.display = 'flex';
     }
 
-    // Функция шаринга картинки с новым текстом
     async function shareReportAsImage() {
         const element = document.getElementById('reportCard');
         if (!element) return;
@@ -852,7 +848,6 @@
                 const file = new File([blob], "weekly_report.png", { type: "image/png" });
                 const tg = window.Telegram?.WebApp;
                 if (tg && typeof tg.shareMessage === 'function') {
-                    // shareMessage не поддерживает файлы, поэтому попробуем navigator.share
                     if (navigator.share) {
                         await navigator.share({
                             title: 'Мой еженедельный отчёт',
