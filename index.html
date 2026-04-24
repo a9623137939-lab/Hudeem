@@ -261,6 +261,10 @@
             font-size: 16px;
             text-align: center;
         }
+        .share-btn {
+            background-color: #6c5ce7;
+            margin-top: 16px;
+        }
     </style>
 </head>
 <body>
@@ -347,6 +351,7 @@
     <div class="modal-content">
         <span class="modal-close" id="modalClose">&times;</span>
         <div id="weeklyReportContent"></div>
+        <button id="shareReportBtn" class="share-btn" style="display: none;">📤 Поделиться</button>
     </div>
 </div>
 
@@ -386,14 +391,15 @@
     const modal = document.getElementById('weeklyModal');
     const modalClose = document.getElementById('modalClose');
     const weeklyReportContent = document.getElementById('weeklyReportContent');
+    const shareReportBtn = document.getElementById('shareReportBtn');
 
     const notifHeader = document.getElementById('notifHeader');
     const notifContent = document.getElementById('notifContent');
     const headerArrow = document.getElementById('headerArrow');
     let isExpanded = false;
 
-    modalClose.onclick = () => { modal.style.display = 'none'; };
-    window.onclick = (event) => { if (event.target === modal) modal.style.display = 'none'; };
+    modalClose.onclick = () => { modal.style.display = 'none'; shareReportBtn.style.display = 'none'; };
+    window.onclick = (event) => { if (event.target === modal) { modal.style.display = 'none'; shareReportBtn.style.display = 'none'; } };
 
     function toggleNotifications() {
         isExpanded = !isExpanded;
@@ -450,7 +456,7 @@
 
     function loadAllData() {
         loadFromCloud(STORAGE_KEY, (log) => {
-            if (log) currentWeightLog = log.map(entry => ({ ...entry, girth: entry.girth !== undefined ? entry.girth : null }));
+            if (log) currentWeightLog = log;
             else currentWeightLog = [];
             if (statsBlock.style.display !== 'none') renderStatistics();
         });
@@ -587,7 +593,7 @@
 
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `<tr></thead><tbody>`;
+        html += `</tr></thead><tbody>`;
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
@@ -682,7 +688,6 @@
     // ---------- Еженедельный отчёт (исправленная логика) ----------
     function getReportWeek() {
         // Возвращает объект { startDate, endDate, endDateFormatted }
-        // endDateFormatted – дата окончания недели (воскресенье) для отображения на кнопке
         const now = new Date();
         const currentHour = now.getHours();
         const currentMin = now.getMinutes();
@@ -690,22 +695,18 @@
         const isAfter2200 = (currentHour >= 22);
         let endDate = new Date(now);
         if (isSunday && isAfter2200) {
-            // сегодня воскресенье после 22:00 – отчёт за текущую неделю (которая закончилась)
-            // endDate = сегодня (воскресенье)
+            // сегодня воскресенье после 22:00 – отчёт за текущую неделю
             endDate = new Date(now);
         } else {
-            // иначе отчёт за прошлую неделю: последнее воскресенье, которое было до сегодня
+            // иначе отчёт за прошлую неделю
             endDate = new Date(now);
-            endDate.setDate(now.getDate() - now.getDay()); // воскресенье текущей или прошлой недели? Если сегодня не воскресенье, получим прошлое воскресенье.
+            endDate.setDate(now.getDate() - now.getDay());
             if (now.getDay() === 0 && !isAfter2200) {
-                // сегодня воскресенье, но ещё не 22:00 – берём прошлое воскресенье (7 дней назад)
                 endDate.setDate(endDate.getDate() - 7);
             }
         }
-        // Начало недели (понедельник) = endDate - 6 дней
         const startDate = new Date(endDate);
         startDate.setDate(endDate.getDate() - 6);
-        // Установка времени на начало/конец дня для корректного сравнения
         startDate.setHours(0,0,0,0);
         endDate.setHours(23,59,59,999);
         const options = { day: 'numeric', month: 'long' };
@@ -721,6 +722,7 @@
     function generateWeeklyReport() {
         if (currentWeightLog.length === 0) {
             weeklyReportContent.innerHTML = `<div class="no-data-message">Нет данных для отчёта</div>`;
+            shareReportBtn.style.display = 'none';
             modal.style.display = 'flex';
             return;
         }
@@ -733,6 +735,7 @@
 
         if (weekEntries.length === 0) {
             weeklyReportContent.innerHTML = `<div class="no-data-message">За неделю до ${endDateFormatted} нет замеров. Добавьте вес, чтобы увидеть статистику.</div>`;
+            shareReportBtn.style.display = 'none';
             modal.style.display = 'flex';
             return;
         }
@@ -753,19 +756,44 @@
         }
 
         let diffHtml = '';
+        let shareText = '';
+        const weekStart = startDate.toLocaleDateString('ru-RU');
+        const weekEnd = endDate.toLocaleDateString('ru-RU');
+
         if (missingDays.length > 0) {
             diffHtml = `<div class="weekly-summary-text" style="background-color:#3a2a2f;">⚠️ Ты пропустил замеры в ${missingDays.join(', ')}. Статистику сделать не получится.</div>`;
+            shareText = `❌ Статистика за неделю ${weekEnd} не рассчитана из-за пропущенных замеров в ${missingDays.join(', ')}.`;
         } else {
-            const firstWeight = weekEntries[0].weight;
-            const lastWeight = weekEntries[weekEntries.length-1].weight;
-            const diff = lastWeight - firstWeight;
-            const absDiff = Math.abs(diff).toFixed(1);
-            if (diff < 0) {
-                diffHtml = `<div class="weekly-summary-text">К сожалению, твой вес за эту неделю стал больше на ${absDiff} кг. Не расстраивайся, у тебя всё получится!</div>`;
-            } else if (diff > 0) {
-                diffHtml = `<div class="weekly-summary-text">За эту неделю ты сделал мир легче на ${absDiff} кг. Поздравляю!</div>`;
+            // Находим максимальный вес среди пн, вт, ср
+            const monIdx = 1, tueIdx = 2, wedIdx = 3;
+            const monWeight = weekEntries.find(e => new Date(e.date).getDay() === monIdx)?.weight;
+            const tueWeight = weekEntries.find(e => new Date(e.date).getDay() === tueIdx)?.weight;
+            const wedWeight = weekEntries.find(e => new Date(e.date).getDay() === wedIdx)?.weight;
+            const weightsFirst = [monWeight, tueWeight, wedWeight].filter(w => w !== undefined);
+            let firstWeight = null;
+            if (weightsFirst.length > 0) {
+                firstWeight = Math.max(...weightsFirst);
             } else {
-                diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
+                // если нет замеров в пн-вт-ср, берём самый первый замер недели
+                firstWeight = weekEntries[0]?.weight;
+            }
+            const lastWeight = weekEntries[weekEntries.length-1]?.weight;
+            if (firstWeight !== null && lastWeight !== null) {
+                const diff = lastWeight - firstWeight;
+                const absDiff = Math.abs(diff).toFixed(1);
+                if (diff < 0) {
+                    diffHtml = `<div class="weekly-summary-text">К сожалению, твой вес за эту неделю стал больше на ${absDiff} кг. Не расстраивайся, у тебя всё получится!</div>`;
+                    shareText = `📊 Неделя ${weekEnd}: вес увеличился на ${absDiff} кг. Держись! 💪`;
+                } else if (diff > 0) {
+                    diffHtml = `<div class="weekly-summary-text">За эту неделю ты сделал мир легче на ${absDiff} кг. Поздравляю!</div>`;
+                    shareText = `🎉 Неделя ${weekEnd}: прогресс! Сброшено ${absDiff} кг. Так держать! 🏆`;
+                } else {
+                    diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
+                    shareText = `⚖️ Неделя ${weekEnd}: вес стабилен. Молодец! 👍`;
+                }
+            } else {
+                diffHtml = `<div class="weekly-summary-text">Недостаточно данных для расчёта динамики.</div>`;
+                shareText = `Недостаточно данных для динамики веса.`;
             }
         }
 
@@ -777,7 +805,19 @@
         tableHtml += `</tbody></table>`;
 
         weeklyReportContent.innerHTML = diffHtml + tableHtml;
+        shareReportBtn.style.display = 'block';
         modal.style.display = 'flex';
+
+        // Сохраняем текст для шаринга
+        shareReportBtn.onclick = () => {
+            const fullShareText = `${shareText}\n\nПодробности:\n${weekEntries.map(e => `${e.date}: ${e.weight}`).join('\n')}`;
+            if (window.Telegram?.WebApp?.shareMessage) {
+                window.Telegram.WebApp.shareMessage(fullShareText);
+            } else {
+                // fallback: копирование в буфер
+                navigator.clipboard.writeText(fullShareText).then(() => showToast("Текст скопирован в буфер обмена"));
+            }
+        };
     }
 
     function init() {
