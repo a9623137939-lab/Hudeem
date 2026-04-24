@@ -437,10 +437,7 @@
     }
 
     async function syncToBackend(payload) {
-        if (!BACKEND_URL || BACKEND_URL === "https://a9623137939-lab.github.io/Hudeem/") {
-            console.log("syncToBackend: BACKEND_URL не настроен");
-            return;
-        }
+        if (!BACKEND_URL) return;
         const tg = window.Telegram?.WebApp;
         const chatId = tg?.initDataUnsafe?.user?.id;
         if (!chatId) {
@@ -465,17 +462,18 @@
     }
 
     function saveNotificationSettings() {
-        notifSettings = {
+        const settings = {
             dailyEnabled: dailyEnabledChk.checked,
             dailyTime: dailyTimeInput.value,
             weeklyEnabled: weeklyEnabledChk.checked,
             weeklyDay: parseInt(weeklyDaySelect.value),
             weeklyTime: weeklyTimeInput.value
         };
-        saveToCloud(NOTIF_KEY, notifSettings, (ok) => {
+        saveToCloud(NOTIF_KEY, settings, (ok) => {
             if (ok) {
+                notifSettings = settings;
                 showToast("Настройки уведомлений сохранены");
-                syncToBackend({ type: 'settings', settings: notifSettings });
+                syncToBackend({ type: 'settings', settings: settings });
             } else {
                 showToast("Ошибка сохранения настроек локально");
             }
@@ -529,16 +527,11 @@
             return;
         }
 
-        // Строим таблицу правильно
-        let html = `<table class="weight-table">`;
-        html += `<thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
+        let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
         html += `</tr></thead><tbody>`;
-
         for (let e of sorted) {
-            html += `<tr>`;
-            html += `<td>${e.date}</td>`;
-            html += `<td>${e.weight.toFixed(1)} кг</td>`;
+            html += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td>`;
             if (girthMode) {
                 let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
                 html += `<td>${girthText}</td>`;
@@ -546,7 +539,6 @@
             html += `</tr>`;
         }
         html += `</tbody></table>`;
-
         html += `<div class="chart-container"><canvas id="weightChartCanvas"></canvas></div>`;
         if (girthMode) {
             html += `<div class="girth-chart-container"><canvas id="girthChartCanvas"></canvas></div>`;
@@ -555,7 +547,6 @@
         }
         statsContent.innerHTML = html;
 
-        // График веса
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
         const weightLabels = sorted.map(e => formatDateForChart(e.date));
@@ -567,7 +558,6 @@
             options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max } } }
         });
 
-        // График охвата
         if (girthMode) {
             const girthCtx = document.getElementById('girthChartCanvas');
             if (girthCtx) {
