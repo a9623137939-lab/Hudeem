@@ -235,14 +235,14 @@
             align-items: center;
         }
         .modal-content {
-            background-color: #1e1e24;
+            background-color: #e6f7ff; /* тёплый голубоватый фон */
             border-radius: 24px;
             width: 90%;
             max-width: 500px;
             max-height: 80%;
             overflow-y: auto;
             padding: 20px;
-            color: #eeeeee;
+            color: #1e1e24;
             position: relative;
         }
         .modal-close {
@@ -251,16 +251,21 @@
             right: 20px;
             font-size: 28px;
             cursor: pointer;
-            color: #aaaaaa;
+            color: #1e1e24;
         }
-        .modal-close:hover { color: #ffffff; }
+        .modal-close:hover { color: #000000; }
         .weekly-summary-text {
-            background-color: #2c2c34;
+            background-color: #ffffffbb;
+            backdrop-filter: blur(4px);
             border-radius: 16px;
             padding: 12px;
             margin-bottom: 16px;
             font-size: 16px;
             text-align: center;
+            color: #1e1e24;
+        }
+        .weekly-summary-text.success {
+            background-color: #d4f1f9;
         }
         .share-btn {
             background-color: #6c5ce7;
@@ -271,12 +276,30 @@
             padding: 8px 16px;
             font-size: 14px;
             text-align: center;
+            color: white;
+            border-radius: 40px;
         }
         #reportCard {
-            background-color: #1e1e24;
+            background-color: #e6f7ff;
             border-radius: 20px;
             padding: 16px;
             margin-bottom: 10px;
+        }
+        .big-number {
+            font-size: 26px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #1e6f5c, #289672);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .inline-text {
+            font-size: 16px;
+            display: inline;
+        }
+        .line-break {
+            display: block;
+            margin-top: 4px;
         }
     </style>
 </head>
@@ -700,16 +723,14 @@
         renderStatistics();
     }
 
-    // ---------- Еженедельный отчёт (исправленная логика) ----------
+    // ---------- Еженедельный отчёт ----------
     function getReportWeek() {
         const now = new Date();
         const currentHour = now.getHours();
-        const currentMin = now.getMinutes();
         const isSunday = now.getDay() === 0;
         const isAfter2200 = (currentHour >= 22);
         let endDate = new Date(now);
         if (isSunday && isAfter2200) {
-            // сегодня воскресенье после 22:00 – отчёт за текущую неделю
             endDate = new Date(now);
         } else {
             endDate = new Date(now);
@@ -753,7 +774,6 @@
             return;
         }
 
-        // Проверка пропусков пятница, суббота, воскресенье
         const requiredDayNames = ['пятница', 'суббота', 'воскресенье'];
         const missingDays = [];
         for (let dayName of requiredDayNames) {
@@ -769,14 +789,9 @@
         }
 
         let diffHtml = '';
-        let shareText = '';
-        const weekStart = startDate.toLocaleDateString('ru-RU');
-        const weekEnd = endDate.toLocaleDateString('ru-RU');
-
         if (missingDays.length > 0) {
-            diffHtml = `<div class="weekly-summary-text" style="background-color:#3a2a2f;">⚠️ Ты пропустил замеры в ${missingDays.join(', ')}. Статистику сделать не получится.</div>`;
+            diffHtml = `<div class="weekly-summary-text" style="background-color:#ffdddd;">⚠️ Ты пропустил замеры в ${missingDays.join(', ')}. Статистику сделать не получится.</div>`;
         } else {
-            // Находим максимальный вес среди пн, вт, ср
             const monIdx = 1, tueIdx = 2, wedIdx = 3;
             const getWeight = (dayIdx) => {
                 const entry = weekEntries.find(e => new Date(e.date).getDay() === dayIdx);
@@ -794,7 +809,12 @@
                 const diff = lastWeight - firstWeight;
                 const absDiff = Math.abs(diff).toFixed(1);
                 if (diff < 0) {
-                    diffHtml = `<div class="weekly-summary-text">За эту неделю ты сделал мир легче на ${absDiff} кг. Поздравляю!</div>`;
+                    diffHtml = `
+                        <div class="weekly-summary-text success">
+                            За эту неделю ты сделал мир легче 💨<br>
+                            <span class="inline-text">на</span> <span class="big-number">${absDiff} кг</span><br>
+                            Поздравляю!
+                        </div>`;
                 } else if (diff > 0) {
                     diffHtml = `<div class="weekly-summary-text">К сожалению, твой вес за эту неделю стал больше на ${absDiff} кг. Не расстраивайся, у тебя всё получится!</div>`;
                 } else {
@@ -805,8 +825,7 @@
             }
         }
 
-        // Таблица
-        let tableHtml = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
+        let tableHtml = `<table class="weight-table" style="background: #ffffffaa;"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
         for (let e of weekEntries) {
             tableHtml += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td></tr>`;
         }
@@ -817,35 +836,30 @@
         modal.style.display = 'flex';
     }
 
-    // ---------- Функция для создания картинки и шаринга ----------
+    // Функция шаринга картинки с новым текстом
     async function shareReportAsImage() {
         const element = document.getElementById('reportCard');
         if (!element) return;
         try {
-            // Добавляем временный стиль для фона (чтобы скриншот не был прозрачным)
-            const originalBg = element.style.backgroundColor;
-            element.style.backgroundColor = '#1e1e24';
-            const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#1e1e24' });
-            element.style.backgroundColor = originalBg;
+            element.style.backgroundColor = '#e6f7ff';
+            const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#e6f7ff' });
+            element.style.backgroundColor = '';
             canvas.toBlob(async (blob) => {
                 if (!blob) {
                     showToast("Не удалось создать изображение");
                     return;
                 }
                 const file = new File([blob], "weekly_report.png", { type: "image/png" });
-                // Попробуем использовать WebApp.shareMessage с картинкой
                 const tg = window.Telegram?.WebApp;
                 if (tg && typeof tg.shareMessage === 'function') {
-                    // shareMessage принимает только текст, не картинку. Поэтому используем альтернативу:
-                    // Отправим ссылку на временный blob через openTelegramLink? Неудобно.
-                    // Используем системный share, если доступен.
+                    // shareMessage не поддерживает файлы, поэтому попробуем navigator.share
                     if (navigator.share) {
                         await navigator.share({
                             title: 'Мой еженедельный отчёт',
+                            text: 'Это мой результат за неделю. Хочешь так же? Подписывайся на @Hudeem_Kolesovi_bot',
                             files: [file]
                         });
                     } else {
-                        // fallback: сохранить изображение
                         const link = document.createElement('a');
                         link.download = 'weekly_report.png';
                         link.href = URL.createObjectURL(blob);
@@ -856,6 +870,7 @@
                 } else if (navigator.share) {
                     await navigator.share({
                         title: 'Мой еженедельный отчёт',
+                        text: 'Это мой результат за неделю. Хочешь так же? Подписывайся на @Hudeem_Kolesovi_bot',
                         files: [file]
                     });
                 } else {
