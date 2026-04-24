@@ -113,7 +113,6 @@
         .btn-secondary { background-color: #2c2c34; border: 1px solid #4a4a56; }
         .btn-secondary:hover { background-color: #3a3a44; }
         .btn-danger { background-color: #3a2a2f; border: 1px solid #8a4a5a; color: #ffaaaa; }
-        .urgent-btn { background-color: #e84393; margin-top: 16px; }
         .stats-container {
             background-color: #1e1e24;
             border-radius: 24px;
@@ -294,8 +293,6 @@
         <button id="resetDataBtn" class="btn-danger">🗑️ Сбросить все данные</button>
     </div>
 
-    <button id="instantNotifyBtn" class="urgent-btn">🚀 Проверить уведомление (тест)</button>
-
     <div id="statsBlock" class="stats-container" style="display: none;">
         <div class="stats-title">📈 История и графики</div>
         <div id="statsContent"></div>
@@ -334,7 +331,6 @@
     const weeklyDaySelect = document.getElementById('weeklyDay');
     const weeklyTimeInput = document.getElementById('weeklyTime');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-    const instantNotifyBtn = document.getElementById('instantNotifyBtn');
 
     const notifHeader = document.getElementById('notifHeader');
     const notifContent = document.getElementById('notifContent');
@@ -625,26 +621,12 @@
         renderStatistics();
     }
 
-    function sendInstantNotification() {
-        const tg = Telegram.WebApp;
-        const chatId = tg?.initDataUnsafe?.user?.id;
-        if (!chatId) {
-            alert("❌ Не удалось получить chat_id. Откройте приложение через бота.");
-            return;
-        }
-        fetch(`${BACKEND_URL}/test_send?chat_id=${encodeURIComponent(chatId)}`)
-            .then(response => response.text())
-            .then(text => alert("✅ " + text))
-            .catch(err => alert("❌ Ошибка: " + err.message));
-    }
-
     function init() {
         setDefaultDate();
         saveBtn.onclick = handleSaveWeight;
         showStatsBtn.onclick = handleShowStats;
         resetDataBtn.onclick = resetAllData;
         saveSettingsBtn.onclick = saveNotificationSettings;
-        instantNotifyBtn.onclick = sendInstantNotification;
         weightInput.oninput = clearWeightError;
         if (girthInput) girthInput.oninput = clearGirthError;
         weightInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSaveWeight(); });
