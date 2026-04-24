@@ -219,6 +219,48 @@
             padding: 10px;
         }
         .girth-field { transition: all 0.2s ease; }
+
+        /* Модальное окно для еженедельного отчёта */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #1e1e24;
+            border-radius: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80%;
+            overflow-y: auto;
+            padding: 20px;
+            color: #eeeeee;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 12px;
+            right: 20px;
+            font-size: 28px;
+            cursor: pointer;
+            color: #aaaaaa;
+        }
+        .modal-close:hover { color: #ffffff; }
+        .weekly-summary-text {
+            background-color: #2c2c34;
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 16px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -291,11 +333,20 @@
     <div class="flex-buttons">
         <button id="showStatsBtn" class="btn-secondary">📊 Показать статистику</button>
         <button id="resetDataBtn" class="btn-danger">🗑️ Сбросить все данные</button>
+        <button id="weeklyReportBtn" class="btn-secondary" style="background-color:#2c2c34;">📅 Еженедельный отчёт</button>
     </div>
 
     <div id="statsBlock" class="stats-container" style="display: none;">
         <div class="stats-title">📈 История и графики</div>
         <div id="statsContent"></div>
+    </div>
+</div>
+
+<!-- Модальное окно для отчёта -->
+<div id="weeklyModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" id="modalClose">&times;</span>
+        <div id="weeklyReportContent"></div>
     </div>
 </div>
 
@@ -331,11 +382,19 @@
     const weeklyDaySelect = document.getElementById('weeklyDay');
     const weeklyTimeInput = document.getElementById('weeklyTime');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const weeklyReportBtn = document.getElementById('weeklyReportBtn');
+    const modal = document.getElementById('weeklyModal');
+    const modalClose = document.getElementById('modalClose');
+    const weeklyReportContent = document.getElementById('weeklyReportContent');
 
     const notifHeader = document.getElementById('notifHeader');
     const notifContent = document.getElementById('notifContent');
     const headerArrow = document.getElementById('headerArrow');
     let isExpanded = false;
+
+    // Закрытие модального окна
+    modalClose.onclick = () => { modal.style.display = 'none'; };
+    window.onclick = (event) => { if (event.target === modal) modal.style.display = 'none'; };
 
     function toggleNotifications() {
         isExpanded = !isExpanded;
@@ -621,6 +680,85 @@
         renderStatistics();
     }
 
+    // ---------- Еженедельный отчёт ----------
+    function updateWeeklyButtonDate() {
+        const now = new Date();
+        // Последнее воскресенье (дата окончания недели)
+        const lastSunday = new Date(now);
+        lastSunday.setDate(now.getDate() - now.getDay()); // воскресенье (0)
+        const options = { day: 'numeric', month: 'long' };
+        const dateStr = lastSunday.toLocaleDateString('ru-RU', options);
+        weeklyReportBtn.textContent = `📅 Еженедельный отчёт за ${dateStr}`;
+    }
+
+    function generateWeeklyReport() {
+        if (currentWeightLog.length === 0) {
+            weeklyReportContent.innerHTML = `<div class="no-data-message">Нет данных для отчёта</div>`;
+            modal.style.display = 'flex';
+            return;
+        }
+
+        // Определяем начало и конец текущей недели (пн-вс) по МСК
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1)); // понедельник
+        startOfWeek.setHours(0,0,0,0);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // воскресенье
+        endOfWeek.setHours(23,59,59,999);
+
+        // Фильтруем записи за неделю
+        const weekEntries = currentWeightLog.filter(entry => {
+            const entryDate = new Date(entry.date);
+            return entryDate >= startOfWeek && entryDate <= endOfWeek;
+        }).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+        if (weekEntries.length === 0) {
+            weeklyReportContent.innerHTML = `<div class="no-data-message">На этой неделе нет замеров. Добавьте вес, чтобы увидеть статистику.</div>`;
+            modal.style.display = 'flex';
+            return;
+        }
+
+        // Проверяем наличие замеров в пятницу, субботу, воскресенье
+        const weekdays = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+        const requiredDays = ['пятница', 'суббота', 'воскресенье'];
+        const missingDays = [];
+        for (let d of requiredDays) {
+            const dayIndex = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'].indexOf(d);
+            if (dayIndex === -1) continue;
+            const hasDay = weekEntries.some(entry => new Date(entry.date).getDay() === dayIndex);
+            if (!hasDay) missingDays.push(d);
+        }
+
+        let summaryHtml = '';
+        let diffHtml = '';
+        if (missingDays.length > 0) {
+            diffHtml = `<div class="weekly-summary-text" style="background-color:#3a2a2f;">⚠️ Ты пропустил замеры в ${missingDays.join(', ')}. Статистику сделать не получится.</div>`;
+        } else {
+            const firstWeight = weekEntries[0].weight;
+            const lastWeight = weekEntries[weekEntries.length-1].weight;
+            const diff = lastWeight - firstWeight;
+            const absDiff = Math.abs(diff).toFixed(1);
+            if (diff > 0) {
+                diffHtml = `<div class="weekly-summary-text">За эту неделю ты сделал мир легче на ${absDiff} кг. Поздравляю!</div>`;
+            } else if (diff < 0) {
+                diffHtml = `<div class="weekly-summary-text">К сожалению, твой вес за эту неделю стал больше на ${absDiff} кг. Не расстраивайся, у тебя всё получится!</div>`;
+            } else {
+                diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
+            }
+        }
+
+        // Таблица замеров за неделю
+        let tableHtml = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
+        for (let e of weekEntries) {
+            tableHtml += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td></tr>`;
+        }
+        tableHtml += `</tbody></table>`;
+
+        weeklyReportContent.innerHTML = diffHtml + tableHtml;
+        modal.style.display = 'flex';
+    }
+
     function init() {
         setDefaultDate();
         saveBtn.onclick = handleSaveWeight;
@@ -643,6 +781,8 @@
         isExpanded = false;
         notifContent.classList.remove('show');
         headerArrow.classList.remove('up');
+        updateWeeklyButtonDate();
+        weeklyReportBtn.onclick = generateWeeklyReport;
     }
     document.addEventListener('DOMContentLoaded', init);
 </script>
