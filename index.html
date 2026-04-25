@@ -408,10 +408,9 @@
     </div>
 </div>
 
-<!-- Модальное окно новости об обновлении -->
+<!-- Модальное окно новости об обновлении – без крестика, без фонового закрытия -->
 <div id="updateModal" class="modal">
     <div class="modal-content">
-        <span class="modal-close" id="updateModalClose">&times;</span>
         <div class="update-text">
             <h2>✨ Что нового в Худеем_bot?</h2>
             <ul>
@@ -468,7 +467,6 @@
 
     // Элементы модального окна новости
     const updateModal = document.getElementById('updateModal');
-    const updateModalClose = document.getElementById('updateModalClose');
     const closeUpdateBtn = document.getElementById('closeUpdateBtn');
 
     const notifHeader = document.getElementById('notifHeader');
@@ -672,7 +670,7 @@
         }
         let html = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `</tr></thead><tbody>`;
+        html += `</table></thead><tbody>`;
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
@@ -920,7 +918,7 @@
         }
     }
 
-    // ---------- Логика показа обновления ----------
+    // ---------- Логика показа обновления (без крестика, без клика по фону) ----------
     function checkAndShowUpdate() {
         loadFromCloud(SEEN_UPDATE_KEY, (seenVersion) => {
             if (seenVersion !== UPDATE_VERSION) {
@@ -963,12 +961,10 @@
         weeklyReportBtn.onclick = generateWeeklyReport;
         shareReportBtn.onclick = shareReportAsImage;
 
-        // настройка модальных окон новости
-        updateModalClose.onclick = () => { updateModal.style.display = 'none'; };
+        // Настройка новостного окна: только кнопка закрывает
         closeUpdateBtn.onclick = closeUpdateAndRemember;
-        window.addEventListener('click', (event) => { if (event.target === updateModal) updateModal.style.display = 'none'; });
 
-        // показать новость, если нужно
+        // Показать новость, если нужно
         checkAndShowUpdate();
     }
     document.addEventListener('DOMContentLoaded', init);
