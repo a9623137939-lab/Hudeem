@@ -247,6 +247,7 @@
             padding: 10px;
         }
         .girth-field { transition: all 0.2s ease; }
+        /* Модальное окно отчёта */
         .modal {
             display: none;
             position: fixed;
@@ -308,6 +309,16 @@
             border-radius: 20px;
             padding: 16px;
             margin-bottom: 10px;
+        }
+        /* Стили для таблицы внутри отчёта (тёмный текст) */
+        #weeklyModal .weight-table th,
+        #weeklyModal .weight-table td {
+            color: #1e1e24;
+            background-color: #e6f7ff;
+            border-bottom: 1px solid #b0c4de;
+        }
+        #weeklyModal .weight-table th {
+            background-color: #d4eaf3;
         }
         .big-number {
             font-size: 28px;
@@ -450,7 +461,7 @@
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
     const GIRTH_MODE_KEY = "girthMode";
-    const WEEKLY_REPORT_FLAG_KEY = "weeklyReportGeneratedFor"; // храним дату воскресенья, для которого уже сгенерирован отчёт
+    const WEEKLY_REPORT_FLAG_KEY = "weeklyReportGeneratedFor";
 
     let weightChart = null;
     let girthChart = null;
@@ -588,12 +599,10 @@
                 refreshStatisticsIfVisible();
                 syncToBackend({ type: 'weight', date, weight, girth: newEntry.girth });
 
-                // *** ОСНОВНОЙ ТРИГГЕР ***
-                // Если сохраняем вес за воскресенье – обновляем отчёт
+                // ОСНОВНОЙ ТРИГГЕР: сохранение в воскресенье
                 const savedDate = new Date(date);
                 if (savedDate.getDay() === 0) {
                     updateWeeklyButtonDate();
-                    // Сохраняем флаг, что для этого воскресенья отчёт уже сгенерирован
                     const sundayStr = getSundayDateString(savedDate);
                     saveToCloud(WEEKLY_REPORT_FLAG_KEY, sundayStr);
                 }
@@ -684,7 +693,9 @@
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
         html += `</tr></thead><tbody>`;
         for (let e of sorted) {
-            html += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td>`;
+            html += `<tr>`;
+            html += `<td>${e.date}</td>`;
+            html += `<td>${e.weight.toFixed(1)} кг</td>`;
             if (girthMode) {
                 let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
                 html += `<td>${girthText}</td>`;
@@ -773,11 +784,10 @@
         renderStatistics();
     }
 
-    // ---------- Еженедельный отчёт (новая логика) ----------
+    // ---------- Еженедельный отчёт ----------
     function getSundayDateString(date) {
-        // принимает Date, возвращает YYYY-MM-DD воскресенья этой недели (или date, если это воскресенье)
         const d = new Date(date);
-        d.setDate(d.getDate() - d.getDay()); // воскресенье
+        d.setDate(d.getDate() - d.getDay());
         return d.toISOString().slice(0,10);
     }
 
@@ -785,10 +795,8 @@
         const now = new Date();
         const currentHour = now.getHours();
         if (now.getDay() === 0 && currentHour >= 22) {
-            // сегодня воскресенье после 22:00 – целевое воскресенье = сегодня
             return new Date(now);
         } else {
-            // иначе – прошлое воскресенье
             const sunday = new Date(now);
             sunday.setDate(now.getDate() - now.getDay());
             return sunday;
@@ -815,13 +823,11 @@
 
     function updateWeeklyButtonDate() {
         const targetSunday = getTargetSunday();
-        const formatted = formatDateForButton(targetSunday);
-        weeklyReportBtn.textContent = `📅 Еженедельный отчёт за ${formatted}`;
+        weeklyReportBtn.textContent = `📅 Еженедельный отчёт за ${formatDateForButton(targetSunday)}`;
     }
 
-    // Генерация содержимого отчёта для заданного воскресенья
     function generateReportContent(targetSunday) {
-        const { entries, startDate, endDate } = getWeekEntries(targetSunday);
+        const { entries } = getWeekEntries(targetSunday);
         if (entries.length === 0) {
             return `<div class="no-data-message">Нет замеров за эту неделю.</div>`;
         }
@@ -853,15 +859,24 @@
                 diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
             }
         }
-        let tableHtml = `<table class="weight-table"><thead><tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th></tr></thead><tbody>`;
+        let tableHtml = `<table class="weight-table"><thead>`;
+        tableHtml += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
+        if (girthMode) tableHtml += `<th>📏 Охват (см)</th>`;
+        tableHtml += `</tr></thead><tbody>`;
         for (let e of entries) {
-            tableHtml += `<tr><td>${e.date}</td><td>${e.weight.toFixed(1)} кг</td></tr>`;
+            tableHtml += `<tr>`;
+            tableHtml += `<td>${e.date}</td>`;
+            tableHtml += `<td>${e.weight.toFixed(1)} кг<\/td>`;
+            if (girthMode) {
+                let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
+                tableHtml += `<td>${girthText}</td>`;
+            }
+            tableHtml += `</tr>`;
         }
         tableHtml += `</tbody></table>`;
         return diffHtml + tableHtml;
     }
 
-    // Показать отчёт (при нажатии на кнопку)
     function showWeeklyReport() {
         const targetSunday = getTargetSunday();
         const content = generateReportContent(targetSunday);
@@ -870,39 +885,20 @@
         modal.style.display = 'flex';
     }
 
-    // Автоматическое создание отчёта в 22:00 в воскресенье (резервный триггер)
     async function checkAndAutoGenerateReport() {
         const now = new Date();
         const isSunday = now.getDay() === 0;
         const currentHour = now.getHours();
         if (isSunday && currentHour >= 22) {
             const targetSundayStr = getSundayDateString(now);
-            const savedFlag = await new Promise(resolve => {
-                loadFromCloud(WEEKLY_REPORT_FLAG_KEY, (val) => resolve(val));
-            });
+            const savedFlag = await new Promise(resolve => loadFromCloud(WEEKLY_REPORT_FLAG_KEY, resolve));
             if (savedFlag !== targetSundayStr) {
-                // Отчёт для этого воскресенья ещё не создан – создаём автоматически
-                const content = generateReportContent(now);
-                weeklyReportContent.innerHTML = content;
-                shareReportBtn.style.display = 'block';
-                modal.style.display = 'flex'; // можно не показывать автоматически, а просто сохранить флаг. Но по заданию: формируется отчёт, но не обязательно показывать. Однако мы покажем, чтобы пользователь знал.
-                await new Promise(resolve => {
-                    saveToCloud(WEEKLY_REPORT_FLAG_KEY, targetSundayStr, resolve);
-                });
+                // Автоматическое формирование отчёта (без показа модального окна, только обновляем флаг)
+                await new Promise(resolve => saveToCloud(WEEKLY_REPORT_FLAG_KEY, targetSundayStr, resolve));
                 updateWeeklyButtonDate();
-                showToast("Еженедельный отчёт сформирован (автоматически)");
+                showToast("📊 Еженедельный отчёт сформирован (автоматически)");
             }
         }
-    }
-
-    // ---------- Обновление ----------
-    function checkAndShowUpdate() {
-        loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
-            if (seen !== UPDATE_VERSION) updateModal.style.display = 'flex';
-        });
-    }
-    function closeUpdateAndRemember() {
-        saveToCloud(SEEN_UPDATE_KEY, UPDATE_VERSION, () => { updateModal.style.display = 'none'; });
     }
 
     async function shareReportAsImage() {
@@ -933,6 +929,16 @@
         } catch(e) { showToast("Ошибка создания скриншота"); }
     }
 
+    // ---------- Обновление ----------
+    function checkAndShowUpdate() {
+        loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
+            if (seen !== UPDATE_VERSION) updateModal.style.display = 'flex';
+        });
+    }
+    function closeUpdateAndRemember() {
+        saveToCloud(SEEN_UPDATE_KEY, UPDATE_VERSION, () => { updateModal.style.display = 'none'; });
+    }
+
     function init() {
         setDefaultDate();
         saveBtn.onclick = handleSaveWeight;
@@ -960,10 +966,8 @@
         shareReportBtn.onclick = shareReportAsImage;
         closeUpdateBtn.onclick = closeUpdateAndRemember;
         checkAndShowUpdate();
-        // Запускаем проверку автоматического отчёта (резервный триггер)
         checkAndAutoGenerateReport();
-        // также можно проверять раз в минуту, но достаточно при загрузке и при сохранении веса
-        setInterval(checkAndAutoGenerateReport, 60000); // на всякий случай
+        setInterval(checkAndAutoGenerateReport, 60000);
     }
     document.addEventListener('DOMContentLoaded', init);
 </script>
