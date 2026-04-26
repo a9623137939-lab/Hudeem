@@ -247,7 +247,6 @@
             padding: 10px;
         }
         .girth-field { transition: all 0.2s ease; }
-        /* Модальное окно отчёта */
         .modal {
             display: none;
             position: fixed;
@@ -310,11 +309,10 @@
             padding: 16px;
             margin-bottom: 10px;
         }
-        /* Стили для таблицы внутри отчёта (тёмный текст) */
         #weeklyModal .weight-table th,
         #weeklyModal .weight-table td {
             color: #1e1e24;
-            background-color: #e6f7ff;
+            background-color: #f0f8ff;
             border-bottom: 1px solid #b0c4de;
         }
         #weeklyModal .weight-table th {
@@ -455,7 +453,7 @@
 
 <script>
     // ---------- КОНФИГУРАЦИЯ ----------
-    const UPDATE_VERSION = "2025-04-26-v2";
+    const UPDATE_VERSION = "2025-04-26-v3";
     const SEEN_UPDATE_KEY = "notifUpdateSeen";
     const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";
     const STORAGE_KEY = "weightLog";
@@ -695,7 +693,7 @@
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
-            html += `<td>${e.weight.toFixed(1)} кг</td>`;
+            html += `<td>${e.weight.toFixed(1)} кг<\/td>`;
             if (girthMode) {
                 let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
                 html += `<td>${girthText}</td>`;
@@ -831,23 +829,26 @@
         if (entries.length === 0) {
             return `<div class="no-data-message">Нет замеров за эту неделю.</div>`;
         }
-        const requiredDays = [5,6,0];
-        const missingDays = [];
-        const dayNames = {5:'пятницу',6:'субботу',0:'воскресенье'};
-        for (let d of requiredDays) {
-            const has = entries.some(e => new Date(e.date).getDay() === d);
-            if (!has) missingDays.push(dayNames[d]);
-        }
+
+        // Проверка: пропущены ли все три дня пятница-суббота-воскресенье?
+        const requiredFriSatSun = [5,6,0];
+        const missingFriSatSun = requiredFriSatSun.filter(day => 
+            !entries.some(e => new Date(e.date).getDay() === day)
+        );
+        const allThreeMissing = missingFriSatSun.length === 3;
+
         let diffHtml = '';
-        if (missingDays.length > 0) {
-            diffHtml = `<div class="weekly-summary-text" style="background-color:#ffdddd;">⚠️ Ты пропустил замеры в ${missingDays.join(', ')}. Статистику сделать не получится.</div>`;
+        if (allThreeMissing) {
+            diffHtml = `<div class="weekly-summary-text" style="background-color:#ffdddd;">⚠️ Ты пропустил замеры в пятницу, субботу и воскресенье. Статистику сделать не получится.</div>`;
         } else {
-            const firstWeights = [];
-            for (let d of [1,2,3]) {
+            // Первый замер: максимальный среди пн-вт-ср, если ни одного нет – берём самый ранний замер недели
+            const monTueWed = [1,2,3];
+            const mtwWeights = [];
+            for (let d of monTueWed) {
                 const e = entries.find(e => new Date(e.date).getDay() === d);
-                if (e) firstWeights.push(e.weight);
+                if (e) mtwWeights.push(e.weight);
             }
-            let firstWeight = (firstWeights.length > 0) ? Math.max(...firstWeights) : entries[0].weight;
+            let firstWeight = (mtwWeights.length > 0) ? Math.max(...mtwWeights) : entries[0].weight;
             const lastWeight = entries[entries.length-1].weight;
             const diff = lastWeight - firstWeight;
             const absDiff = Math.abs(diff).toFixed(1);
@@ -859,6 +860,8 @@
                 diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
             }
         }
+
+        // Таблица
         let tableHtml = `<table class="weight-table"><thead>`;
         tableHtml += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) tableHtml += `<th>📏 Охват (см)</th>`;
@@ -893,7 +896,6 @@
             const targetSundayStr = getSundayDateString(now);
             const savedFlag = await new Promise(resolve => loadFromCloud(WEEKLY_REPORT_FLAG_KEY, resolve));
             if (savedFlag !== targetSundayStr) {
-                // Автоматическое формирование отчёта (без показа модального окна, только обновляем флаг)
                 await new Promise(resolve => saveToCloud(WEEKLY_REPORT_FLAG_KEY, targetSundayStr, resolve));
                 updateWeeklyButtonDate();
                 showToast("📊 Еженедельный отчёт сформирован (автоматически)");
@@ -929,7 +931,6 @@
         } catch(e) { showToast("Ошибка создания скриншота"); }
     }
 
-    // ---------- Обновление ----------
     function checkAndShowUpdate() {
         loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
             if (seen !== UPDATE_VERSION) updateModal.style.display = 'flex';
