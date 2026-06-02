@@ -453,9 +453,9 @@
 
 <script>
     // ---------- КОНФИГУРАЦИЯ ----------
-    const UPDATE_VERSION = "2025-04-26-v3";
-    const SEEN_UPDATE_KEY = "notifUpdateSeen";
-    const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";
+    // ВНИМАНИЕ: сервер уведомлений сейчас не работает (Render отключён).
+    // Если вы перенесёте бэкенд, замените BACKEND_URL на актуальный адрес.
+    const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";   // временно не работает
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
     const GIRTH_MODE_KEY = "girthMode";
@@ -596,8 +596,7 @@
                 showToast("🎉 Данные сохранены!");
                 refreshStatisticsIfVisible();
                 syncToBackend({ type: 'weight', date, weight, girth: newEntry.girth });
-
-                // ОСНОВНОЙ ТРИГГЕР: сохранение в воскресенье
+                // основной триггер для недельного отчёта (если воскресенье)
                 const savedDate = new Date(date);
                 if (savedDate.getDay() === 0) {
                     updateWeeklyButtonDate();
@@ -686,6 +685,7 @@
             if (girthChart) { girthChart.destroy(); girthChart = null; }
             return;
         }
+
         let html = `<div class="table-wrapper"><table class="weight-table"><thead>`;
         html += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
@@ -718,9 +718,10 @@
         const weightScale = getWeightYScale(sorted);
         weightChart = new Chart(weightCtx, {
             type: 'line',
-            data: { labels: weightLabels, datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
+            data: { labels: weightLabels, datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }] },
             options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max } } }
         });
+
         if (girthMode) {
             const girthCtx = document.getElementById('girthChartCanvas');
             if (girthCtx) {
@@ -736,7 +737,7 @@
                     const girthScale = getGirthYScale(girthEntries);
                     girthChart = new Chart(ctx, {
                         type: 'line',
-                        data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:4, tension:0.2, fill:true }] },
+                        data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }] },
                         options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max } } }
                     });
                 }
@@ -830,21 +831,20 @@
             return `<div class="no-data-message">Нет замеров за эту неделю.</div>`;
         }
 
-        // Проверка: пропущены ли все три дня пятница-суббота-воскресенье?
-        const requiredFriSatSun = [5,6,0];
-        const missingFriSatSun = requiredFriSatSun.filter(day => 
-            !entries.some(e => new Date(e.date).getDay() === day)
-        );
-        const allThreeMissing = missingFriSatSun.length === 3;
+        const requiredDays = [5,6,0];
+        const missingDays = [];
+        const dayNames = {5:'пятницу',6:'субботу',0:'воскресенье'};
+        for (let d of requiredDays) {
+            const has = entries.some(e => new Date(e.date).getDay() === d);
+            if (!has) missingDays.push(dayNames[d]);
+        }
 
         let diffHtml = '';
-        if (allThreeMissing) {
+        if (missingDays.length === 3) {
             diffHtml = `<div class="weekly-summary-text" style="background-color:#ffdddd;">⚠️ Ты пропустил замеры в пятницу, субботу и воскресенье. Статистику сделать не получится.</div>`;
         } else {
-            // Первый замер: максимальный среди пн-вт-ср, если ни одного нет – берём самый ранний замер недели
-            const monTueWed = [1,2,3];
             const mtwWeights = [];
-            for (let d of monTueWed) {
+            for (let d of [1,2,3]) {
                 const e = entries.find(e => new Date(e.date).getDay() === d);
                 if (e) mtwWeights.push(e.weight);
             }
@@ -861,7 +861,6 @@
             }
         }
 
-        // Таблица
         let tableHtml = `<table class="weight-table"><thead>`;
         tableHtml += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) tableHtml += `<th>📏 Охват (см)</th>`;
@@ -886,21 +885,6 @@
         weeklyReportContent.innerHTML = content;
         shareReportBtn.style.display = 'block';
         modal.style.display = 'flex';
-    }
-
-    async function checkAndAutoGenerateReport() {
-        const now = new Date();
-        const isSunday = now.getDay() === 0;
-        const currentHour = now.getHours();
-        if (isSunday && currentHour >= 22) {
-            const targetSundayStr = getSundayDateString(now);
-            const savedFlag = await new Promise(resolve => loadFromCloud(WEEKLY_REPORT_FLAG_KEY, resolve));
-            if (savedFlag !== targetSundayStr) {
-                await new Promise(resolve => saveToCloud(WEEKLY_REPORT_FLAG_KEY, targetSundayStr, resolve));
-                updateWeeklyButtonDate();
-                showToast("📊 Еженедельный отчёт сформирован (автоматически)");
-            }
-        }
     }
 
     async function shareReportAsImage() {
@@ -931,6 +915,24 @@
         } catch(e) { showToast("Ошибка создания скриншота"); }
     }
 
+    async function checkAndAutoGenerateReport() {
+        const now = new Date();
+        const isSunday = now.getDay() === 0;
+        const currentHour = now.getHours();
+        if (isSunday && currentHour >= 22) {
+            const targetSundayStr = getSundayDateString(now);
+            const savedFlag = await new Promise(resolve => loadFromCloud(WEEKLY_REPORT_FLAG_KEY, resolve));
+            if (savedFlag !== targetSundayStr) {
+                await new Promise(resolve => saveToCloud(WEEKLY_REPORT_FLAG_KEY, targetSundayStr, resolve));
+                updateWeeklyButtonDate();
+                showToast("📊 Еженедельный отчёт сформирован (автоматически)");
+            }
+        }
+    }
+
+    // ---------- Обновление ----------
+    const UPDATE_VERSION = "2025-05-20-v1";
+    const SEEN_UPDATE_KEY = "notifUpdateSeen";
     function checkAndShowUpdate() {
         loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
             if (seen !== UPDATE_VERSION) updateModal.style.display = 'flex';
