@@ -651,53 +651,51 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    // ---------- НОВАЯ ЛОГИКА ДЛЯ ГРАФИКОВ (надёжная, с метками) ----------
+    // ---------- ГЕНЕРАЦИЯ МЕТОК ДЛЯ ОСИ X (категориальная ось) ----------
     const shortMonths = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-    function formatDateLabel(date) {
+    function formatLabel(date) {
         return `${date.getDate()} ${shortMonths[date.getMonth()]}`;
     }
 
-    function buildLabelsAndData(sortedEntries, isWeight = true) {
-        // возвращает { labels, data } для графика
-        if (sortedEntries.length === 0) return { labels: [], data: [] };
-        const dates = sortedEntries.map(e => new Date(e.date));
+    function generateXLabels(dates) {
+        // dates: массив объектов Date, отсортированный по возрастанию
+        if (dates.length === 0) return [];
         const first = dates[0];
         const last = dates[dates.length-1];
         const totalDays = (last - first) / (1000*60*60*24);
-        const labels = new Array(sortedEntries.length).fill('');
-        const data = sortedEntries.map(e => isWeight ? e.weight : e.girth);
+        const labels = new Array(dates.length).fill('');
         // первая и последняя метка всегда
-        labels[0] = formatDateLabel(first);
-        labels[labels.length-1] = formatDateLabel(last);
+        labels[0] = formatLabel(first);
+        labels[labels.length-1] = formatLabel(last);
         if (totalDays < 30) {
             // каждые 3 дня
-            for (let i = 1; i < sortedEntries.length-1; i++) {
-                const diffDays = Math.floor((dates[i] - first) / (1000*60*60*24));
+            for (let i = 1; i < dates.length-1; i++) {
+                const diffDays = Math.round((dates[i] - first) / (1000*60*60*24));
                 if (diffDays % 3 === 0) {
-                    labels[i] = formatDateLabel(dates[i]);
+                    labels[i] = formatLabel(dates[i]);
                 }
             }
         } else if (totalDays <= 90) {
             // каждую неделю
-            for (let i = 1; i < sortedEntries.length-1; i++) {
-                const diffDays = Math.floor((dates[i] - first) / (1000*60*60*24));
+            for (let i = 1; i < dates.length-1; i++) {
+                const diffDays = Math.round((dates[i] - first) / (1000*60*60*24));
                 if (diffDays % 7 === 0) {
-                    labels[i] = formatDateLabel(dates[i]);
+                    labels[i] = formatLabel(dates[i]);
                 }
             }
         } else {
             // более 3 месяцев: 1-е и 15-е число
-            for (let i = 1; i < sortedEntries.length-1; i++) {
+            for (let i = 1; i < dates.length-1; i++) {
                 const day = dates[i].getDate();
                 if (day === 1) {
-                    labels[i] = shortMonths[dates[i].getMonth()];
+                    labels[i] = shortMonths[dates[i].getMonth()]; // только месяц
                 } else if (day === 15) {
-                    labels[i] = '';
+                    labels[i] = '';   // пустая метка (только точка)
                 }
             }
         }
-        return { labels, data };
+        return labels;
     }
 
     function getWeightYScale(data) {
@@ -729,7 +727,7 @@
         let html = `<div class="table-wrapper"><table class="weight-table"><thead>`;
         html += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `</tr></thead><tbody>`;
+        html += `</td></thead><tbody>`;
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
@@ -738,7 +736,7 @@
                 let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
                 html += `<td>${girthText}</td>`;
             }
-            html += `</tr>`;
+            html += `<tr>`;
         }
         html += `</tbody></table></div>`;
         html += `<div class="chart-container"><canvas id="weightChartCanvas"></canvas></div>`;
@@ -751,11 +749,14 @@
         const wrapper = document.querySelector('.table-wrapper');
         if (wrapper) setTimeout(() => { wrapper.scrollTop = wrapper.scrollHeight; }, 50);
 
-        // График веса
+        // Подготовка данных для графика веса
+        const weightDates = sorted.map(e => new Date(e.date));
+        const weightLabels = generateXLabels(weightDates);
+        const weightData = sorted.map(e => e.weight);
+        const weightScale = getWeightYScale(sorted);
+
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
-        const { labels: weightLabels, data: weightData } = buildLabelsAndData(sorted, true);
-        const weightScale = getWeightYScale(sorted);
         weightChart = new Chart(weightCtx, {
             type: 'line',
             data: {
@@ -784,7 +785,9 @@
                     const container = document.querySelector('.girth-chart-container');
                     if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
                 } else {
-                    const { labels: girthLabels, data: girthData } = buildLabelsAndData(girthEntries, false);
+                    const girthDates = girthEntries.map(e => new Date(e.date));
+                    const girthLabels = generateXLabels(girthDates);
+                    const girthData = girthEntries.map(e => e.girth);
                     const girthScale = getGirthYScale(girthEntries);
                     girthChart = new Chart(ctx, {
                         type: 'line',
@@ -915,7 +918,7 @@
         let tableHtml = `<table class="weight-table"><thead>`;
         tableHtml += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) tableHtml += `<th>📏 Охват (см)</th>`;
-        tableHtml += `<tr></thead><tbody>`;
+        tableHtml += `<table></thead><tbody>`;
         for (let e of entries) {
             tableHtml += `<tr>`;
             tableHtml += `<td>${e.date}</td>`;
