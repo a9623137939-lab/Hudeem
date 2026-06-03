@@ -453,7 +453,7 @@
 
 <script>
     // ---------- КОНФИГУРАЦИЯ ----------
-    const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";   // временно не работает (сервер отключён)
+    const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";   // временно не работает
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
     const GIRTH_MODE_KEY = "girthMode";
@@ -651,42 +651,55 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    // ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ГРАФИКА ----------
+    // ---------- ФУНКЦИИ ДЛЯ ГРАФИКА (исправленная логика меток) ----------
     const shortMonths = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-    function formatDateForAxis(date) {
-        // Формат "день месяц" (например, "3 июн")
+    function formatDateLabel(date) {
         return `${date.getDate()} ${shortMonths[date.getMonth()]}`;
     }
 
-    // Определяем, нужно ли показывать метку для данной даты, исходя из правил
-    function shouldShowLabel(date, index, firstDate, lastDate, totalDays) {
-        if (index === 0 || date.getTime() === lastDate.getTime()) return true; // всегда показываем первую и последнюю
+    function generateLabelsForChart(dates) {
+        // dates: массив объектов Date, отсортированный по возрастанию
+        if (dates.length === 0) return [];
+        const first = dates[0];
+        const last = dates[dates.length-1];
+        const totalDays = (last - first) / (1000*60*60*24);
+        const labels = new Array(dates.length).fill('');
+        
+        // первая и последняя метка всегда
+        labels[0] = formatDateLabel(first);
+        labels[labels.length-1] = formatDateLabel(last);
+        
         if (totalDays < 30) {
             // каждые 3 дня
-            const diffDays = Math.floor((date - firstDate) / (1000*60*60*24));
-            return diffDays % 3 === 0;
+            for (let i = 1; i < dates.length-1; i++) {
+                const diff = Math.floor((dates[i] - first) / (1000*60*60*24));
+                if (diff % 3 === 0) {
+                    labels[i] = formatDateLabel(dates[i]);
+                }
+            }
         } else if (totalDays <= 90) {
             // каждую неделю
-            const diffDays = Math.floor((date - firstDate) / (1000*60*60*24));
-            return diffDays % 7 === 0;
+            for (let i = 1; i < dates.length-1; i++) {
+                const diff = Math.floor((dates[i] - first) / (1000*60*60*24));
+                if (diff % 7 === 0) {
+                    labels[i] = formatDateLabel(dates[i]);
+                }
+            }
         } else {
             // более 3 месяцев: 1-е и 15-е число
-            const day = date.getDate();
-            return day === 1 || day === 15;
+            for (let i = 1; i < dates.length-1; i++) {
+                const day = dates[i].getDate();
+                if (day === 1 || day === 15) {
+                    if (day === 1) {
+                        labels[i] = shortMonths[dates[i].getMonth()];
+                    } else {
+                        labels[i] = '';   // 15-е число – только точка
+                    }
+                }
+            }
         }
-    }
-
-    function getTickCallbackForChart(dates, firstDate, lastDate, totalDays) {
-        // Возвращаем функцию, которая для каждого значения (индекса) возвращает строку метки
-        return function(val, index) {
-            if (index < 0 || index >= dates.length) return '';
-            const date = dates[index];
-            if (!shouldShowLabel(date, index, firstDate, lastDate, totalDays)) return '';
-            // Если totalDays > 90 и день = 15, возвращаем пустую строку (только точка)
-            if (totalDays > 90 && date.getDate() === 15) return '';
-            return formatDateForAxis(date);
-        };
+        return labels;
     }
 
     function getWeightYScale(data) {
@@ -718,14 +731,14 @@
         let html = `<div class="table-wrapper"><table class="weight-table"><thead>`;
         html += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
-        html += `<tr></thead><tbody>`;
+        html += `</td></thead><tbody>`;
         for (let e of sorted) {
             html += `<tr>`;
             html += `<td>${e.date}</td>`;
             html += `<td>${e.weight.toFixed(1)} кг<\/td>`;
             if (girthMode) {
                 let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
-                html += `<td>${girthText}<td>`;
+                html += `<td>${girthText}</td>`;
             }
             html += `</tr>`;
         }
@@ -742,38 +755,25 @@
 
         // Подготовка данных для графика веса
         const weightDates = sorted.map(e => new Date(e.date));
-        const firstDate = weightDates[0];
-        const lastDate = weightDates[weightDates.length-1];
-        const totalDays = (lastDate - firstDate) / (1000*60*60*24);
+        const weightLabels = generateLabelsForChart(weightDates);
+        const weightData = sorted.map(e => e.weight);
+        const weightScale = getWeightYScale(sorted);
 
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
-        const weightScale = getWeightYScale(sorted);
         weightChart = new Chart(weightCtx, {
             type: 'line',
             data: {
-                labels: weightDates.map(d => formatDateForAxis(d)), // временные метки (будут заменены callback)
-                datasets: [{ label:'Вес (кг)', data: sorted.map(e => e.weight), borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }]
+                labels: weightLabels,
+                datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: { legend: { labels: { color:'#eee' } } },
                 scales: {
-                    x: {
-                        ticks: {
-                            color: '#ccc',
-                            maxRotation: 45,
-                            minRotation: 45,
-                            autoSkip: false,
-                            callback: getTickCallbackForChart(weightDates, firstDate, lastDate, totalDays)
-                        }
-                    },
-                    y: {
-                        ticks: { color: '#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' },
-                        min: weightScale.min,
-                        max: weightScale.max
-                    }
+                    x: { ticks: { color: '#ccc', maxRotation: 45, minRotation: 45, autoSkip: false } },
+                    y: { ticks: { color: '#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max }
                 }
             }
         });
@@ -790,35 +790,22 @@
                     if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
                 } else {
                     const girthDates = girthEntries.map(e => new Date(e.date));
-                    const firstGirthDate = girthDates[0];
-                    const lastGirthDate = girthDates[girthDates.length-1];
-                    const totalGirthDays = (lastGirthDate - firstGirthDate) / (1000*60*60*24);
+                    const girthLabels = generateLabelsForChart(girthDates);
+                    const girthData = girthEntries.map(e => e.girth);
                     const girthScale = getGirthYScale(girthEntries);
                     girthChart = new Chart(ctx, {
                         type: 'line',
                         data: {
-                            labels: girthDates.map(d => formatDateForAxis(d)),
-                            datasets: [{ label:'Охват (см)', data: girthEntries.map(e => e.girth), borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }]
+                            labels: girthLabels,
+                            datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: true,
                             plugins: { legend: { labels: { color:'#eee' } } },
                             scales: {
-                                x: {
-                                    ticks: {
-                                        color: '#ccc',
-                                        maxRotation: 45,
-                                        minRotation: 45,
-                                        autoSkip: false,
-                                        callback: getTickCallbackForChart(girthDates, firstGirthDate, lastGirthDate, totalGirthDays)
-                                    }
-                                },
-                                y: {
-                                    ticks: { color: '#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' },
-                                    min: girthScale.min,
-                                    max: girthScale.max
-                                }
+                                x: { ticks: { color: '#ccc', maxRotation: 45, minRotation: 45, autoSkip: false } },
+                                y: { ticks: { color: '#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max }
                             }
                         }
                     });
@@ -999,7 +986,7 @@
     }
 
     // ---------- Обновление ----------
-    const UPDATE_VERSION = "2025-06-03-v2";
+    const UPDATE_VERSION = "2025-06-03-v3";
     const SEEN_UPDATE_KEY = "notifUpdateSeen";
     function checkAndShowUpdate() {
         loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
