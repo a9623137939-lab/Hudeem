@@ -453,6 +453,8 @@
 
 <script>
     // ---------- КОНФИГУРАЦИЯ ----------
+    // ВНИМАНИЕ: сервер уведомлений сейчас не работает (Render отключён).
+    // Если вы перенесёте бэкенд, замените BACKEND_URL на актуальный адрес.
     const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";   // временно не работает
     const STORAGE_KEY = "weightLog";
     const NOTIF_KEY = "notifSettings";
@@ -594,6 +596,7 @@
                 showToast("🎉 Данные сохранены!");
                 refreshStatisticsIfVisible();
                 syncToBackend({ type: 'weight', date, weight, girth: newEntry.girth });
+                // основной триггер для недельного отчёта (если воскресенье)
                 const savedDate = new Date(date);
                 if (savedDate.getDay() === 0) {
                     updateWeeklyButtonDate();
@@ -651,7 +654,13 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    // ---------- ФУНКЦИИ ДЛЯ ГРАФИКОВ (оси X — только названия месяцев) ----------
+    function formatDateForChart(dateStr) {
+        const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        return `${date.getDate()}.${months[date.getMonth()]}`;
+    }
+
     function getWeightYScale(data) {
         const weights = data.map(d => d.weight).filter(w => w !== null && !isNaN(w));
         if (weights.length === 0) return { min: 60, max: 100, stepSize: 1 };
@@ -677,7 +686,6 @@
             return;
         }
 
-        // Построение HTML таблицы
         let html = `<div class="table-wrapper"><table class="weight-table"><thead>`;
         html += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) html += `<th>📏 Охват (см)</th>`;
@@ -703,34 +711,17 @@
         const wrapper = document.querySelector('.table-wrapper');
         if (wrapper) setTimeout(() => { wrapper.scrollTop = wrapper.scrollHeight; }, 50);
 
-        // ========== ГРАФИК ВЕСА ==========
-        // Преобразуем данные в формат {x: timestamp, y: вес}
-        const weightPoints = sorted.map(e => ({ x: new Date(e.date).getTime(), y: e.weight })).sort((a,b)=>a.x-b.x);
-        const weightDates = weightPoints.map(p => new Date(p.x));
-
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
+        const weightLabels = sorted.map(e => formatDateForChart(e.date));
+        const weightData = sorted.map(e => e.weight);
         const weightScale = getWeightYScale(sorted);
         weightChart = new Chart(weightCtx, {
             type: 'line',
-            data: { datasets: [{ label: 'Вес (кг)', data: weightPoints, borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,0.05)', borderWidth: 3, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, tension: 0.2, fill: true }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { labels: { color: '#eee' } }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw.y.toFixed(1)} кг` } } },
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: { unit: 'month', displayFormats: { month: 'MMM' }, tooltipFormat: 'd MMM yyyy' },
-                        ticks: { color: '#ccc', maxRotation: 45, minRotation: 45, autoSkip: true, source: 'auto' },
-                        adapters: { date: { locale: 'ru' } }
-                    },
-                    y: { ticks: { color: '#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max }
-                }
-            }
+            data: { labels: weightLabels, datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max } } }
         });
 
-        // ========== ГРАФИК ОХВАТА (если включён) ==========
         if (girthMode) {
             const girthCtx = document.getElementById('girthChartCanvas');
             if (girthCtx) {
@@ -741,25 +732,13 @@
                     const container = document.querySelector('.girth-chart-container');
                     if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
                 } else {
-                    const girthPoints = girthEntries.map(e => ({ x: new Date(e.date).getTime(), y: e.girth })).sort((a,b)=>a.x-b.x);
+                    const girthLabels = girthEntries.map(e => formatDateForChart(e.date));
+                    const girthData = girthEntries.map(e => e.girth);
                     const girthScale = getGirthYScale(girthEntries);
                     girthChart = new Chart(ctx, {
                         type: 'line',
-                        data: { datasets: [{ label: 'Охват (см)', data: girthPoints, borderColor: '#e84393', backgroundColor: 'rgba(232,67,147,0.05)', borderWidth: 3, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, tension: 0.2, fill: true }] },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: true,
-                            plugins: { legend: { labels: { color: '#eee' } }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw.y.toFixed(1)} см` } } },
-                            scales: {
-                                x: {
-                                    type: 'time',
-                                    time: { unit: 'month', displayFormats: { month: 'MMM' }, tooltipFormat: 'd MMM yyyy' },
-                                    ticks: { color: '#ccc', maxRotation: 45, minRotation: 45, autoSkip: true, source: 'auto' },
-                                    adapters: { date: { locale: 'ru' } }
-                                },
-                                y: { ticks: { color: '#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max }
-                            }
-                        }
+                        data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }] },
+                        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max } } }
                     });
                 }
             }
@@ -804,22 +783,25 @@
         renderStatistics();
     }
 
-    // ---------- Еженедельный отчёт (без изменений) ----------
+    // ---------- Еженедельный отчёт ----------
     function getSundayDateString(date) {
         const d = new Date(date);
         d.setDate(d.getDate() - d.getDay());
         return d.toISOString().slice(0,10);
     }
+
     function getTargetSunday() {
         const now = new Date();
         const currentHour = now.getHours();
-        if (now.getDay() === 0 && currentHour >= 22) return new Date(now);
-        else {
+        if (now.getDay() === 0 && currentHour >= 22) {
+            return new Date(now);
+        } else {
             const sunday = new Date(now);
             sunday.setDate(now.getDate() - now.getDay());
             return sunday;
         }
     }
+
     function getWeekEntries(targetSunday) {
         const startDate = new Date(targetSunday);
         startDate.setDate(targetSunday.getDate() - 6);
@@ -832,17 +814,23 @@
         }).sort((a,b) => new Date(a.date) - new Date(b.date));
         return { entries, startDate, endDate };
     }
+
     function formatDateForButton(date) {
         const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
         return `${date.getDate()} ${months[date.getMonth()]}`;
     }
+
     function updateWeeklyButtonDate() {
         const targetSunday = getTargetSunday();
         weeklyReportBtn.textContent = `📅 Еженедельный отчёт за ${formatDateForButton(targetSunday)}`;
     }
+
     function generateReportContent(targetSunday) {
         const { entries } = getWeekEntries(targetSunday);
-        if (entries.length === 0) return `<div class="no-data-message">Нет замеров за эту неделю.</div>`;
+        if (entries.length === 0) {
+            return `<div class="no-data-message">Нет замеров за эту неделю.</div>`;
+        }
+
         const requiredDays = [5,6,0];
         const missingDays = [];
         const dayNames = {5:'пятницу',6:'субботу',0:'воскресенье'};
@@ -850,6 +838,7 @@
             const has = entries.some(e => new Date(e.date).getDay() === d);
             if (!has) missingDays.push(dayNames[d]);
         }
+
         let diffHtml = '';
         if (missingDays.length === 3) {
             diffHtml = `<div class="weekly-summary-text" style="background-color:#ffdddd;">⚠️ Ты пропустил замеры в пятницу, субботу и воскресенье. Статистику сделать не получится.</div>`;
@@ -871,6 +860,7 @@
                 diffHtml = `<div class="weekly-summary-text">Твой вес не изменился за эту неделю. Так держать!</div>`;
             }
         }
+
         let tableHtml = `<table class="weight-table"><thead>`;
         tableHtml += `<tr><th>📅 Дата</th><th>⚖️ Вес (кг)</th>`;
         if (girthMode) tableHtml += `<th>📏 Охват (см)</th>`;
@@ -883,11 +873,12 @@
                 let girthText = (e.girth !== null && e.girth !== undefined) ? e.girth.toFixed(1) + ' см' : '—';
                 tableHtml += `<td>${girthText}</td>`;
             }
-            tableHtml += `<tr>`;
+            tableHtml += `</tr>`;
         }
-        tableHtml += `</tbody><table>`;
+        tableHtml += `</tbody></table>`;
         return diffHtml + tableHtml;
     }
+
     function showWeeklyReport() {
         const targetSunday = getTargetSunday();
         const content = generateReportContent(targetSunday);
@@ -895,6 +886,7 @@
         shareReportBtn.style.display = 'block';
         modal.style.display = 'flex';
     }
+
     async function shareReportAsImage() {
         const element = document.getElementById('reportCard');
         if (!element) return;
@@ -922,6 +914,7 @@
             }, 'image/png');
         } catch(e) { showToast("Ошибка создания скриншота"); }
     }
+
     async function checkAndAutoGenerateReport() {
         const now = new Date();
         const isSunday = now.getDay() === 0;
@@ -938,7 +931,7 @@
     }
 
     // ---------- Обновление ----------
-    const UPDATE_VERSION = "2025-06-03-v5";
+    const UPDATE_VERSION = "2025-05-20-v1";
     const SEEN_UPDATE_KEY = "notifUpdateSeen";
     function checkAndShowUpdate() {
         loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
