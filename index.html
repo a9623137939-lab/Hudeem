@@ -6,6 +6,7 @@
     <title>Контроль веса — Telegram Mini App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -631,13 +632,6 @@
         if (statsBlock.style.display !== 'none') renderStatistics();
     }
 
-    function formatDateForChart(dateStr) {
-        const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return dateStr;
-        return `${date.getDate()}.${months[date.getMonth()]}`;
-    }
-
     function getWeightYScale(data) {
         const weights = data.map(d => d.weight).filter(w => w !== null && !isNaN(w));
         if (weights.length === 0) return { min: 60, max: 100, stepSize: 1 };
@@ -690,13 +684,30 @@
 
         const weightCtx = document.getElementById('weightChartCanvas').getContext('2d');
         if (weightChart) weightChart.destroy();
-        const weightLabels = sorted.map(e => formatDateForChart(e.date));
-        const weightData = sorted.map(e => e.weight);
+        const weightPoints = sorted.map(e => ({ x: e.date, y: e.weight }));
         const weightScale = getWeightYScale(sorted);
         weightChart = new Chart(weightCtx, {
             type: 'line',
-            data: { labels: weightLabels, datasets: [{ label:'Вес (кг)', data: weightData, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }] },
-            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max } } }
+            data: { datasets: [{ label:'Вес (кг)', data: weightPoints, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.08)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:10, tension:0.3, fill:true }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { labels: { color:'#eee' } } },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'day', tooltipFormat: 'd MMM yyyy', displayFormats: { day: 'd MMM' } },
+                        ticks: {
+                            color:'#ccc',
+                            maxRotation: 0,
+                            minRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 7
+                        }
+                    },
+                    y: { ticks: { color:'#ccc', stepSize: weightScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: weightScale.min, max: weightScale.max }
+                }
+            }
         });
 
         if (girthMode) {
@@ -709,13 +720,30 @@
                     const container = document.querySelector('.girth-chart-container');
                     if (container) container.innerHTML = `<div class="no-data-message" style="height:260px; display:flex; align-items:center; justify-content:center;">📏 Нет данных об охвате</div>`;
                 } else {
-                    const girthLabels = girthEntries.map(e => formatDateForChart(e.date));
-                    const girthData = girthEntries.map(e => e.girth);
+                    const girthPoints = girthEntries.map(e => ({ x: e.date, y: e.girth }));
                     const girthScale = getGirthYScale(girthEntries);
                     girthChart = new Chart(ctx, {
                         type: 'line',
-                        data: { labels: girthLabels, datasets: [{ label:'Охват (см)', data: girthData, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.05)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:0, tension:0.2, fill:true }] },
-                        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color:'#eee' } } }, scales: { x: { ticks: { color:'#ccc', maxRotation: 45, minRotation: 45 } }, y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max } } }
+                        data: { datasets: [{ label:'Охват (см)', data: girthPoints, borderColor:'#e84393', backgroundColor:'rgba(232,67,147,0.08)', borderWidth:3, pointRadius:0, pointHoverRadius:0, pointHitRadius:10, tension:0.3, fill:true }] },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { labels: { color:'#eee' } } },
+                            scales: {
+                                x: {
+                                    type: 'time',
+                                    time: { unit: 'day', tooltipFormat: 'd MMM yyyy', displayFormats: { day: 'd MMM' } },
+                                    ticks: {
+                                        color:'#ccc',
+                                        maxRotation: 0,
+                                        minRotation: 0,
+                                        autoSkip: true,
+                                        maxTicksLimit: 7
+                                    }
+                                },
+                                y: { ticks: { color:'#ccc', stepSize: girthScale.stepSize, callback: (val) => Number.isInteger(val) ? val : '' }, min: girthScale.min, max: girthScale.max }
+                            }
+                        }
                     });
                 }
             }
