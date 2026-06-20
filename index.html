@@ -23,6 +23,7 @@
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            overflow: hidden;
         }
         .header-row {
             display: flex;
@@ -87,6 +88,7 @@
         }
         input, select {
             width: 100%;
+            max-width: 100%;
             background-color: #2c2c34;
             border: 1px solid #3a3a44;
             border-radius: 16px;
@@ -94,8 +96,20 @@
             font-size: 16px;
             color: #ffffff;
             outline: none;
+            box-sizing: border-box;
         }
         input:focus, select:focus { border-color: #6c5ce7; box-shadow: 0 0 0 2px rgba(108,92,231,0.3); }
+        input[type="date"], input[type="time"] {
+            -webkit-appearance: none;
+            appearance: none;
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+        }
+        input[type="date"]::-webkit-date-and-time-value {
+            text-align: left;
+        }
         .error-msg { color: #ff6b6b; font-size: 13px; margin-top: 6px; padding-left: 8px; }
         .btn-group, .flex-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
         button {
