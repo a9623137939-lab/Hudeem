@@ -201,51 +201,6 @@
             .weight-table th, .weight-table td { font-size: 12px; padding: 6px 4px; }
             .table-wrapper { max-height: 280px; }
         }
-        .collapsible-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            padding: 8px 0;
-        }
-        .collapsible-header .title {
-            font-size: 20px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .arrow {
-            font-size: 24px;
-            transition: transform 0.2s ease;
-            user-select: none;
-        }
-        .arrow.up { transform: rotate(180deg); }
-        .collapsible-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease-out;
-            margin-top: 0;
-        }
-        .collapsible-content.show {
-            max-height: 800px;
-            transition: max-height 0.4s ease-in;
-            margin-top: 20px;
-        }
-        .settings-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .settings-row label { margin-bottom: 0; }
-        .time-select, .weekday-select {
-            background-color: #2c2c34;
-            border-radius: 16px;
-            padding: 10px;
-        }
         .girth-field { transition: all 0.2s ease; }
         .modal {
             display: none;
@@ -381,40 +336,6 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="collapsible-header" id="notifHeader">
-            <div class="title"><span>🔔</span> Настройка уведомлений</div>
-            <span class="arrow" id="headerArrow">▼</span>
-        </div>
-        <div class="collapsible-content" id="notifContent">
-            <div class="settings-row">
-                <span>Ежедневное напоминание</span>
-                <label class="switch"><input type="checkbox" id="dailyEnabled"><span class="slider"></span></label>
-            </div>
-            <div class="settings-row">
-                <label>Время отправки</label>
-                <input type="time" id="dailyTime" value="19:00" class="time-select">
-            </div>
-            <div class="settings-row">
-                <span>Еженедельная сводка</span>
-                <label class="switch"><input type="checkbox" id="weeklyEnabled"><span class="slider"></span></label>
-            </div>
-            <div class="settings-row">
-                <label>День недели</label>
-                <select id="weeklyDay" class="weekday-select">
-                    <option value="0">Понедельник</option><option value="1">Вторник</option><option value="2">Среда</option>
-                    <option value="3">Четверг</option><option value="4">Пятница</option><option value="5">Суббота</option>
-                    <option value="6">Воскресенье</option>
-                </select>
-            </div>
-            <div class="settings-row">
-                <label>Время сводки</label>
-                <input type="time" id="weeklyTime" value="19:00" class="time-select">
-            </div>
-            <button id="saveSettingsBtn" class="btn-secondary">💾 Сохранить настройки</button>
-        </div>
-    </div>
-
     <div class="flex-buttons">
         <button id="showStatsBtn" class="btn-secondary">📊 Показать статистику</button>
         <button id="resetDataBtn" class="btn-danger">🗑️ Сбросить все данные</button>
@@ -440,11 +361,11 @@
 <div id="updateModal" class="modal">
     <div class="modal-content">
         <div class="update-text">
-            <h2>✨ Что нового в Худеем_bot?</h2>
+            <h2>✨ Что нового?</h2>
             <ul>
-                <li>📅 <strong>Еженедельный отчёт</strong> — после воскресного замера вы увидите итоги недели. Достижениями можно делиться прямо из приложения.</li>
-                <li>🔔 <strong>Уведомления</strong> — настраивайте удобное время для напоминаний о замерах и еженедельных сводках.</li>
-                <li>🐞 <strong>Исправление ошибок</strong> — спасибо за ваши отзывы! ❤️</li>
+                <li>🛠️ <strong>Надёжное хранение</strong> — записи веса теперь хранятся каждая отдельно, что чинит ошибку сохранения при большом количестве записей.</li>
+                <li>🧹 <strong>Чистка</strong> — убрали неработающие уведомления и зависимость от внешнего сервера.</li>
+                <li>🐞 Все ваши прежние данные сохранены и перенесены автоматически.</li>
             </ul>
         </div>
         <button id="closeUpdateBtn" class="update-btn">Спасибо. Больше не показывать</button>
@@ -453,18 +374,19 @@
 
 <script>
     // ---------- КОНФИГУРАЦИЯ ----------
-    // ВНИМАНИЕ: сервер уведомлений сейчас не работает (Render отключён).
-    // Если вы перенесёте бэкенд, замените BACKEND_URL на актуальный адрес.
-    const BACKEND_URL = "https://weight-bot-fjvu.onrender.com";   // временно не работает
-    const STORAGE_KEY = "weightLog";
-    const NOTIF_KEY = "notifSettings";
+    // Ключ для индекса дат (список всех дат, по которым есть записи)
+    const INDEX_KEY = "weightIndex";
+    // Префикс для ключей отдельных записей: weightEntry_2026-06-20
+    const ENTRY_PREFIX = "weightEntry_";
+    // Старый ключ (единый блок со всеми записями) — используется только для миграции
+    const LEGACY_STORAGE_KEY = "weightLog";
     const GIRTH_MODE_KEY = "girthMode";
     const WEEKLY_REPORT_FLAG_KEY = "weeklyReportGeneratedFor";
+    const MIGRATION_DONE_KEY = "migratedToPerEntryStorage_v1";
 
     let weightChart = null;
     let girthChart = null;
     let currentWeightLog = [];
-    let notifSettings = { dailyEnabled: false, dailyTime: "19:00", weeklyEnabled: false, weeklyDay: 6, weeklyTime: "19:00" };
     let girthMode = false;
 
     // DOM элементы
@@ -480,12 +402,6 @@
     const resetDataBtn = document.getElementById('resetDataBtn');
     const statsBlock = document.getElementById('statsBlock');
     const statsContent = document.getElementById('statsContent');
-    const dailyEnabledChk = document.getElementById('dailyEnabled');
-    const dailyTimeInput = document.getElementById('dailyTime');
-    const weeklyEnabledChk = document.getElementById('weeklyEnabled');
-    const weeklyDaySelect = document.getElementById('weeklyDay');
-    const weeklyTimeInput = document.getElementById('weeklyTime');
-    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const weeklyReportBtn = document.getElementById('weeklyReportBtn');
     const modal = document.getElementById('weeklyModal');
     const modalClose = document.getElementById('modalClose');
@@ -494,25 +410,8 @@
     const updateModal = document.getElementById('updateModal');
     const closeUpdateBtn = document.getElementById('closeUpdateBtn');
 
-    const notifHeader = document.getElementById('notifHeader');
-    const notifContent = document.getElementById('notifContent');
-    const headerArrow = document.getElementById('headerArrow');
-    let isExpanded = false;
-
     modalClose.onclick = () => { modal.style.display = 'none'; shareReportBtn.style.display = 'none'; };
     window.onclick = (event) => { if (event.target === modal) { modal.style.display = 'none'; shareReportBtn.style.display = 'none'; } };
-
-    function toggleNotifications() {
-        isExpanded = !isExpanded;
-        if (isExpanded) {
-            notifContent.classList.add('show');
-            headerArrow.classList.add('up');
-        } else {
-            notifContent.classList.remove('show');
-            headerArrow.classList.remove('up');
-        }
-    }
-    notifHeader.addEventListener('click', toggleNotifications);
 
     function getTodayDate() {
         const today = new Date();
@@ -522,7 +421,7 @@
         return `${year}-${month}-${day}`;
     }
     function setDefaultDate() { dateInput.value = getTodayDate(); }
-    function showToast(message, duration = 2200) {
+    function showToast(message, duration = 2800) {
         const existing = document.querySelector('.toast-notification');
         if (existing) existing.remove();
         const toast = document.createElement('div');
@@ -543,105 +442,169 @@
     function isValidWeight(w) { return !isNaN(w) && w >= 20 && w <= 300; }
     function isValidGirth(g) { return !isNaN(g) && g >= 30 && g <= 300; }
 
-    function loadFromCloud(key, callback) {
-        if (!window.Telegram?.WebApp?.CloudStorage) return callback(null);
-        Telegram.WebApp.CloudStorage.getItem(key, (err, val) => {
-            if (err || !val) callback(null);
-            else try { callback(JSON.parse(val)); } catch(e) { callback(null); }
-        });
-    }
-    function saveToCloud(key, data, callback) {
-        if (!window.Telegram?.WebApp?.CloudStorage) return callback?.(false);
-        Telegram.WebApp.CloudStorage.setItem(key, JSON.stringify(data), (err) => callback?.(!err));
-    }
-
-    function loadAllData() {
-        loadFromCloud(STORAGE_KEY, (log) => {
-            if (log) currentWeightLog = log;
-            else currentWeightLog = [];
-            if (statsBlock.style.display !== 'none') renderStatistics();
-        });
-        loadFromCloud(NOTIF_KEY, (settings) => {
-            if (settings) {
-                notifSettings = settings;
-                dailyEnabledChk.checked = notifSettings.dailyEnabled || false;
-                dailyTimeInput.value = notifSettings.dailyTime || "19:00";
-                weeklyEnabledChk.checked = notifSettings.weeklyEnabled || false;
-                weeklyDaySelect.value = notifSettings.weeklyDay ?? 6;
-                weeklyTimeInput.value = notifSettings.weeklyTime || "19:00";
+    // ---------- Низкоуровневая работа с CloudStorage (с промисами и явными ошибками) ----------
+    function cloudGet(key) {
+        return new Promise((resolve) => {
+            if (!window.Telegram?.WebApp?.CloudStorage) {
+                resolve({ ok: false, value: null, error: 'CloudStorage недоступен (откройте приложение через Telegram)' });
+                return;
             }
+            Telegram.WebApp.CloudStorage.getItem(key, (err, val) => {
+                if (err) resolve({ ok: false, value: null, error: String(err) });
+                else resolve({ ok: true, value: val || null, error: null });
+            });
         });
-        loadFromCloud(GIRTH_MODE_KEY, (mode) => {
-            girthMode = mode === true;
-            girthToggle.checked = girthMode;
-            girthGroup.style.display = girthMode ? 'block' : 'none';
-            if (statsBlock.style.display !== 'none') renderStatistics();
+    }
+    function cloudSet(key, value) {
+        return new Promise((resolve) => {
+            if (!window.Telegram?.WebApp?.CloudStorage) {
+                resolve({ ok: false, error: 'CloudStorage недоступен (откройте приложение через Telegram)' });
+                return;
+            }
+            Telegram.WebApp.CloudStorage.setItem(key, value, (err) => {
+                if (err) resolve({ ok: false, error: String(err) });
+                else resolve({ ok: true, error: null });
+            });
+        });
+    }
+    function cloudRemove(key) {
+        return new Promise((resolve) => {
+            if (!window.Telegram?.WebApp?.CloudStorage) { resolve({ ok: false }); return; }
+            Telegram.WebApp.CloudStorage.removeItem(key, (err) => resolve({ ok: !err }));
+        });
+    }
+    function cloudGetKeys() {
+        return new Promise((resolve) => {
+            if (!window.Telegram?.WebApp?.CloudStorage) { resolve([]); return; }
+            Telegram.WebApp.CloudStorage.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
         });
     }
 
-    function addOrUpdateWeight(date, weight, girth = null) {
-        let log = [...currentWeightLog];
-        const idx = log.findIndex(e => e.date === date);
-        if (idx !== -1) {
-            let msg = `Запись за ${date} уже существует (${log[idx].weight} кг)`;
-            if (log[idx].girth) msg += `, охват ${log[idx].girth} см`;
+    function loadJSON(key, fallback) {
+        return cloudGet(key).then(res => {
+            if (!res.ok || !res.value) return fallback;
+            try { return JSON.parse(res.value); } catch (e) { return fallback; }
+        });
+    }
+    function saveJSON(key, data) {
+        return cloudSet(key, JSON.stringify(data));
+    }
+
+    // ---------- Хранение записей: одна запись = один ключ ----------
+    function entryKey(date) { return ENTRY_PREFIX + date; }
+
+    async function loadIndex() {
+        const idx = await loadJSON(INDEX_KEY, []);
+        return Array.isArray(idx) ? idx : [];
+    }
+    function saveIndex(dates) {
+        return saveJSON(INDEX_KEY, dates);
+    }
+
+    async function loadAllEntries() {
+        const dates = await loadIndex();
+        if (dates.length === 0) return [];
+        const entries = [];
+        for (const date of dates) {
+            const entry = await loadJSON(entryKey(date), null);
+            if (entry) entries.push(entry);
+        }
+        return entries;
+    }
+
+    async function saveEntry(entry) {
+        const res = await saveJSON(entryKey(entry.date), entry);
+        if (!res.ok) return { ok: false, error: res.error };
+        const dates = await loadIndex();
+        if (!dates.includes(entry.date)) {
+            dates.push(entry.date);
+            const idxRes = await saveIndex(dates);
+            if (!idxRes.ok) return { ok: false, error: idxRes.error };
+        }
+        return { ok: true };
+    }
+
+    async function deleteAllEntries() {
+        const dates = await loadIndex();
+        for (const date of dates) {
+            await cloudRemove(entryKey(date));
+        }
+        await saveIndex([]);
+    }
+
+    // ---------- Миграция со старой схемы (один большой ключ) на новую ----------
+    async function migrateIfNeeded() {
+        const alreadyMigrated = await loadJSON(MIGRATION_DONE_KEY, false);
+        if (alreadyMigrated) return;
+
+        const legacy = await loadJSON(LEGACY_STORAGE_KEY, null);
+        if (!legacy || !Array.isArray(legacy) || legacy.length === 0) {
+            // Нечего переносить — просто помечаем миграцию выполненной
+            await saveJSON(MIGRATION_DONE_KEY, true);
+            return;
+        }
+
+        showToast("⏳ Переносим ваши данные в новое хранилище...", 2000);
+
+        const dates = [];
+        for (const entry of legacy) {
+            if (!entry || !entry.date) continue;
+            const clean = {
+                date: entry.date,
+                weight: entry.weight,
+                girth: (entry.girth !== undefined && entry.girth !== null) ? entry.girth : null
+            };
+            const res = await saveJSON(entryKey(clean.date), clean);
+            if (res.ok) dates.push(clean.date);
+        }
+        await saveIndex([...new Set(dates)]);
+        await saveJSON(MIGRATION_DONE_KEY, true);
+        // Старый ключ намеренно НЕ удаляем — оставляем как резервную копию.
+        showToast(`✅ Перенесено записей: ${dates.length}`, 2800);
+    }
+
+    async function loadAllData() {
+        await migrateIfNeeded();
+        currentWeightLog = await loadAllEntries();
+        if (statsBlock.style.display !== 'none') renderStatistics();
+
+        const mode = await loadJSON(GIRTH_MODE_KEY, false);
+        girthMode = mode === true;
+        girthToggle.checked = girthMode;
+        girthGroup.style.display = girthMode ? 'block' : 'none';
+        if (statsBlock.style.display !== 'none') renderStatistics();
+    }
+
+    async function addOrUpdateWeight(date, weight, girth = null) {
+        const existing = currentWeightLog.find(e => e.date === date);
+        if (existing) {
+            let msg = `Запись за ${date} уже существует (${existing.weight} кг)`;
+            if (existing.girth) msg += `, охват ${existing.girth} см`;
             if (!confirm(`${msg}. Перезаписать?`)) return false;
         }
         const newEntry = { date, weight, girth: (girth !== null && !isNaN(girth) && girth !== '') ? parseFloat(girth) : null };
-        if (idx !== -1) log[idx] = newEntry;
-        else log.push(newEntry);
-        saveToCloud(STORAGE_KEY, log, (ok) => {
-            if (ok) {
-                currentWeightLog = log;
-                showToast("🎉 Данные сохранены!");
-                refreshStatisticsIfVisible();
-                syncToBackend({ type: 'weight', date, weight, girth: newEntry.girth });
-                // основной триггер для недельного отчёта (если воскресенье)
-                const savedDate = new Date(date);
-                if (savedDate.getDay() === 0) {
-                    updateWeeklyButtonDate();
-                    const sundayStr = getSundayDateString(savedDate);
-                    saveToCloud(WEEKLY_REPORT_FLAG_KEY, sundayStr);
-                }
-            } else showToast("Ошибка сохранения");
-        });
-        return true;
+        const res = await saveEntry(newEntry);
+        if (res.ok) {
+            const idx = currentWeightLog.findIndex(e => e.date === date);
+            if (idx !== -1) currentWeightLog[idx] = newEntry;
+            else currentWeightLog.push(newEntry);
+            showToast("🎉 Данные сохранены!");
+            refreshStatisticsIfVisible();
+            const savedDate = new Date(date);
+            if (savedDate.getDay() === 0) {
+                updateWeeklyButtonDate();
+                const sundayStr = getSundayDateString(savedDate);
+                await saveJSON(WEEKLY_REPORT_FLAG_KEY, sundayStr);
+            }
+        } else {
+            showToast("Ошибка сохранения: " + (res.error || "неизвестная причина"), 4000);
+        }
+        return res.ok;
     }
 
-    async function syncToBackend(payload) {
-        if (!BACKEND_URL) return;
-        const tg = window.Telegram?.WebApp;
-        const chatId = tg?.initDataUnsafe?.user?.id;
-        if (!chatId) return;
-        try {
-            await fetch(`${BACKEND_URL}/sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, ...payload })
-            });
-        } catch(e) { console.warn(e); }
-    }
-
-    function saveNotificationSettings() {
-        const settings = {
-            dailyEnabled: dailyEnabledChk.checked,
-            dailyTime: dailyTimeInput.value,
-            weeklyEnabled: weeklyEnabledChk.checked,
-            weeklyDay: parseInt(weeklyDaySelect.value),
-            weeklyTime: weeklyTimeInput.value
-        };
-        saveToCloud(NOTIF_KEY, settings, (ok) => {
-            if (ok) {
-                notifSettings = settings;
-                showToast("Настройки уведомлений сохранены");
-                syncToBackend({ type: 'settings', settings });
-            } else showToast("Ошибка сохранения настроек локально");
-        });
-    }
-
-    function saveGirthMode(enabled) {
+    async function saveGirthMode(enabled) {
         girthMode = enabled;
-        saveToCloud(GIRTH_MODE_KEY, girthMode);
+        await saveJSON(GIRTH_MODE_KEY, girthMode);
         girthGroup.style.display = girthMode ? 'block' : 'none';
         if (!girthMode) {
             clearGirthError();
@@ -745,11 +708,12 @@
         } else if (girthChart) { girthChart.destroy(); girthChart = null; }
     }
 
-    function resetAllData() {
+    async function resetAllData() {
         if (!confirm("Удалить все записи?")) return;
-        saveToCloud(STORAGE_KEY, [], (ok) => {
-            if (ok) { currentWeightLog = []; showToast("Все данные удалены"); refreshStatisticsIfVisible(); syncToBackend({ type: 'reset' }); }
-        });
+        await deleteAllEntries();
+        currentWeightLog = [];
+        showToast("Все данные удалены");
+        refreshStatisticsIfVisible();
     }
 
     function handleSaveWeight() {
@@ -771,11 +735,13 @@
                 girth = g;
             }
         }
-        if (addOrUpdateWeight(date, w, girth)) {
-            weightInput.value = '';
-            if (girthInput) girthInput.value = '';
-            setDefaultDate();
-        }
+        addOrUpdateWeight(date, w, girth).then((ok) => {
+            if (ok) {
+                weightInput.value = '';
+                if (girthInput) girthInput.value = '';
+                setDefaultDate();
+            }
+        });
     }
 
     function handleShowStats() {
@@ -900,7 +866,7 @@
                 if (navigator.share) {
                     await navigator.share({
                         title: 'Мой еженедельный отчёт',
-                        text: 'Это мой результат за неделю. Хочешь так же? Подписывайся на @Hudeem_Kolesovi_bot',
+                        text: 'Это мой результат за неделю.',
                         files: [file]
                     });
                 } else {
@@ -921,9 +887,9 @@
         const currentHour = now.getHours();
         if (isSunday && currentHour >= 22) {
             const targetSundayStr = getSundayDateString(now);
-            const savedFlag = await new Promise(resolve => loadFromCloud(WEEKLY_REPORT_FLAG_KEY, resolve));
+            const savedFlag = await loadJSON(WEEKLY_REPORT_FLAG_KEY, null);
             if (savedFlag !== targetSundayStr) {
-                await new Promise(resolve => saveToCloud(WEEKLY_REPORT_FLAG_KEY, targetSundayStr, resolve));
+                await saveJSON(WEEKLY_REPORT_FLAG_KEY, targetSundayStr);
                 updateWeeklyButtonDate();
                 showToast("📊 Еженедельный отчёт сформирован (автоматически)");
             }
@@ -931,23 +897,22 @@
     }
 
     // ---------- Обновление ----------
-    const UPDATE_VERSION = "2025-05-20-v1";
+    const UPDATE_VERSION = "2026-06-20-v2-no-backend";
     const SEEN_UPDATE_KEY = "notifUpdateSeen";
-    function checkAndShowUpdate() {
-        loadFromCloud(SEEN_UPDATE_KEY, (seen) => {
-            if (seen !== UPDATE_VERSION) updateModal.style.display = 'flex';
-        });
+    async function checkAndShowUpdate() {
+        const seen = await loadJSON(SEEN_UPDATE_KEY, null);
+        if (seen !== UPDATE_VERSION) updateModal.style.display = 'flex';
     }
-    function closeUpdateAndRemember() {
-        saveToCloud(SEEN_UPDATE_KEY, UPDATE_VERSION, () => { updateModal.style.display = 'none'; });
+    async function closeUpdateAndRemember() {
+        await saveJSON(SEEN_UPDATE_KEY, UPDATE_VERSION);
+        updateModal.style.display = 'none';
     }
 
-    function init() {
+    async function init() {
         setDefaultDate();
         saveBtn.onclick = handleSaveWeight;
         showStatsBtn.onclick = handleShowStats;
         resetDataBtn.onclick = resetAllData;
-        saveSettingsBtn.onclick = saveNotificationSettings;
         weightInput.oninput = clearWeightError;
         if (girthInput) girthInput.oninput = clearGirthError;
         weightInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSaveWeight(); });
@@ -960,15 +925,12 @@
             tg.setHeaderColor('#0f0f12');
             tg.setBackgroundColor('#0f0f12');
         }
-        loadAllData();
-        isExpanded = false;
-        notifContent.classList.remove('show');
-        headerArrow.classList.remove('up');
+        await loadAllData();
         updateWeeklyButtonDate();
         weeklyReportBtn.onclick = showWeeklyReport;
         shareReportBtn.onclick = shareReportAsImage;
         closeUpdateBtn.onclick = closeUpdateAndRemember;
-        checkAndShowUpdate();
+        await checkAndShowUpdate();
         checkAndAutoGenerateReport();
         setInterval(checkAndAutoGenerateReport, 60000);
     }
